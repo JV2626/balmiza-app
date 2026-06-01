@@ -1,7 +1,16 @@
 import React from 'react';
 import { StyleSheet, Text, View, FlatList, Image, SafeAreaView } from 'react-native';
-import { COLORS } from '../theme/colors';
 import { Ionicons } from '@expo/vector-icons';
+
+const COLORS = {
+  primary: '#E63946',
+  background: '#FFFFFF',
+  cardBg: '#FAFAFA',
+  border: '#EEEEEE',
+  text: '#333333',
+  textSecondary: '#888888',
+  oilOk: '#4ADE80'
+};
 
 interface TripRecord {
   id: string;
@@ -184,7 +193,7 @@ const styles = StyleSheet.create({
   distanceRow: {
     marginTop: 6,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+    borderTopColor: 'rgba(0, 0, 0, 0.05)',
     paddingTop: 6,
   },
   distanceLabel: {
