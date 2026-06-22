@@ -12,91 +12,104 @@ service cloud.firestore {
       return request.auth != null && request.auth.token != null;
     }
 
-    // Helper para verificar se o usuário possui cargo de administrador no Firestore
+    // Helper para verificar se o usuário possui cargo de administrador no Firestore (com e-mail formatado em minúsculo)
     function isAdmin() {
       return isAuthenticated() && 
-        exists(/databases/$(database)/documents/usuarios/$(request.auth.token.email)) &&
-        get(/databases/$(database)/documents/usuarios/$(request.auth.token.email)).data.role == 'admin';
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.token.email.lower())) &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.token.email.lower())).data.role == 'admin';
     }
 
-    // Helper para validar campos de entrada de forma geral
-    function isValidRole(role) {
-      return role == 'admin' || role == 'driver' || role == 'motorista';
-    }
-
-    // Coleção: usuarios
+    // Coleção: usuarios (Perfis e cargos dos usuários do app)
     match /usuarios/{email} {
-      allow read: if isAuthenticated() && (request.auth.token.email.toLowerCase() == email.toLowerCase() || isAdmin());
+      allow read: if isAuthenticated() && (request.auth.token.email.lower() == email.lower() || isAdmin());
       
       // Criação: Apenas se for o próprio usuário criando sua conta com papel padrão 'driver' (evita auto-promoção)
       allow create: if isAdmin() || (
         isAuthenticated() && 
-        request.auth.token.email.toLowerCase() == email.toLowerCase() && 
+        request.auth.token.email.lower() == email.lower() && 
         request.resource.data.role == 'driver' &&
-        request.resource.data.email.toLowerCase() == email.toLowerCase()
+        request.resource.data.email.lower() == email.lower()
       );
       
       // Atualização: Usuários comuns podem atualizar seus próprios dados (como pushToken), mas NUNCA alterar seu papel (role)
       allow update: if isAdmin() || (
         isAuthenticated() && 
-        request.auth.token.email.toLowerCase() == email.toLowerCase() && 
+        request.auth.token.email.lower() == email.lower() && 
         request.resource.data.role == resource.data.role
       );
       
       allow delete: if isAdmin();
     }
 
-    // Coleção: viagens
+    // Coleção: viagens (Escalas de viagens dos motoristas)
     match /viagens/{tripId} {
       allow read: if isAuthenticated();
       allow create, delete: if isAdmin();
       
       // Atualização: Admins podem atualizar tudo.
-      // Motoristas só podem atualizar se forem o motorista designado E se não estiverem reatribuindo a viagem a outrem
+      // Motoristas só podem iniciar/concluir se forem o motorista designado e não estiverem reatribuindo a viagem a outro motorista
       allow update: if isAdmin() || (
         isAuthenticated() && 
-        (resource.data.motoristaId == request.auth.token.email.toLowerCase() || resource.data.motoristaEmail == request.auth.token.email.toLowerCase()) &&
+        (resource.data.motoristaId == request.auth.token.email.lower() || resource.data.motoristaEmail == request.auth.token.email.lower()) &&
         (request.resource.data.motoristaId == resource.data.motoristaId || request.resource.data.motoristaEmail == resource.data.motoristaEmail)
       );
     }
 
-    // Coleção: veiculos
-    match /veiculos/{vehicleId} {
+    // Coleção: trips (Histórico de viagens encerradas para painel administrativo)
+    match /trips/{tripId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      
+      // Criação: Qualquer motorista autenticado pode salvar o fechamento correspondente ao seu próprio ID
+      allow create: if isAuthenticated() && 
+        (request.resource.data.driverId == request.auth.token.email.lower() || isAdmin());
+        
+      allow update, delete: if isAdmin();
     }
 
-    // Coleção: funcionarios
+    // Coleção: veiculos (Dados da frota da empresa)
+    match /veiculos/{vehicleId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAdmin();
+      
+      // Atualização: Admins podem editar tudo. Motoristas só podem atualizar a quilometragem (kmAtual) se ela aumentar
+      allow update: if isAdmin() || (
+        isAuthenticated() && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['kmAtual']) &&
+        request.resource.data.kmAtual >= resource.data.kmAtual
+      );
+    }
+
+    // Coleção: funcionarios (Dados e residências dos passageiros da JBS)
     match /funcionarios/{empId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
-    // Coleção: locais_favoritos
+    // Coleção: locais_favoritos (CDA, JBS e locais rápidos)
     match /locais_favoritos/{locId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
-    // Coleção: avarias
+    // Coleção: avarias (Relatórios de avarias dos carros enviados por motoristas)
     match /avarias/{reportId} {
       allow read: if isAuthenticated();
       
       // Criação: Qualquer motorista autenticado pode criar, contanto que o e-mail no relatório coincida com seu login
       allow create: if isAuthenticated() && 
-        request.resource.data.motoristaEmail.toLowerCase() == request.auth.token.email.toLowerCase();
+        request.resource.data.motoristaEmail.lower() == request.auth.token.email.lower();
         
       // Atualização/Exclusão: Apenas administradores podem atualizar o status da avaria ou apagá-la
       allow update, delete: if isAdmin();
     }
 
-    // Coleção: reembolsos
+    // Coleção: reembolsos (Pedidos de reembolso enviados à central e IA)
     match /reembolsos/{reimbId} {
-      allow read: if isAuthenticated() && (resource.data.motoristaId == request.auth.token.email.toLowerCase() || isAdmin());
+      allow read: if isAuthenticated() && (resource.data.motoristaId == request.auth.token.email.lower() || isAdmin());
       
       // Criação: O motorista só pode criar reembolsos para si mesmo, com valor positivo e com status inicial 'pendente'
       allow create: if isAuthenticated() && 
-        request.resource.data.motoristaId == request.auth.token.email.toLowerCase() &&
+        request.resource.data.motoristaId == request.auth.token.email.lower() &&
         request.resource.data.valor > 0 &&
         request.resource.data.status == 'pendente';
         
@@ -104,7 +117,7 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // Coleção: shifts
+    // Coleção: shifts (Turnos/Rotas rápidas da central)
     match /shifts/{shiftId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();

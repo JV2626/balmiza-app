@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator
 import { collection, query, where, onSnapshot, doc, setDoc, getDocs } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { getFirebaseDb } from '../config/firebase';
+import { getFirebaseDb, getFirebaseAuth } from '../config/firebase';
 import { TripClosingModal } from '../components/TripClosingModal';
 import { ChecklistModal } from '../components/ChecklistModal';
 import { AnimatedCard } from '../components/AnimatedCard';
@@ -128,6 +128,11 @@ export const DriverHomeScreen = ({ navigation }: any) => {
   };
 
   const handleLogout = async () => {
+    try {
+      await getFirebaseAuth().signOut();
+    } catch (e) {
+      console.log('Erro ao fazer signOut no DriverHome:', e);
+    }
     await AsyncStorage.removeItem('@userId');
     await AsyncStorage.removeItem('@userRole');
     await AsyncStorage.removeItem('@userEmail');

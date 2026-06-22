@@ -69,6 +69,9 @@ export function AppNavigator() {
               if (authResult.success) {
                 setInitialRoute(role === 'admin' ? 'Admin' : 'Home');
               } else {
+                await auth.signOut();
+                await AsyncStorage.clear();
+                setUserRole(null);
                 setInitialRoute('Login');
               }
             } else {
