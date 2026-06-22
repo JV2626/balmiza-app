@@ -35,15 +35,20 @@ export function AppNavigator() {
           let role: 'driver' | 'admin' = 'driver';
           if (userSnap.exists()) {
             const uData = userSnap.data();
-            role = (uData.role as 'driver' | 'admin') || 'driver';
+            if (uData && uData.ativo === false) {
+              // Se o motorista está cadastrado mas foi desativado pelo administrador
+              await auth.signOut();
+              await AsyncStorage.clear();
+              setUserRole(null);
+              setInitialRoute('Login');
+              setLoading(false);
+              return;
+            }
+            role = (uData?.role as 'driver' | 'admin') || 'driver';
           } else {
-            // Deslogar se o usuário não tiver registro no Firestore
-            await auth.signOut();
-            await AsyncStorage.clear();
-            setUserRole(null);
-            setInitialRoute('Login');
-            setLoading(false);
-            return;
+            // Se o perfil do usuário ainda não existe no Firestore, assumimos o papel de 'driver' por padrão.
+            // Isso evita deslogar o usuário em uma corrida de login durante a criação automática do seu perfil.
+            role = 'driver';
           }
 
           // Atualizar AsyncStorage com informações confiáveis vindas do Firestore
