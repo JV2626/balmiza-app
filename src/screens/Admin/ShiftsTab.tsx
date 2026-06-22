@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform, ScrollView, FlatList } from 'react-native';
-import { collection, addDoc, doc, getDoc, query, where, getDocs, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc, query, where, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getFirebaseDb } from '../../config/firebase';
 import { colors } from '../../theme/colors';
@@ -162,7 +162,7 @@ export const ShiftsTab = () => {
         if (userDoc.exists()) {
           const pushToken = userDoc.data().pushToken;
           if (pushToken) {
-            const title = editingShiftId ? 'Atenção: Sua Rota Foi Alterada! 🔄' : 'Nova Escala Designada! 🚚';
+            const title = editingShiftId ? 'Atenção: Sua Rota Foi Alterada! 🔄' : 'Nova Escala Designada! 🚗';
             const body = editingShiftId 
               ? 'A central atualizou o seu roteiro. Por favor, verifique as novas paradas no aplicativo.'
               : `Veículo ${vehiclePlate.toUpperCase()} com ${cleanedStops.length} paradas prontas para você.`;
@@ -181,14 +181,12 @@ export const ShiftsTab = () => {
         Platform.OS === 'web' ? window.alert('Escala atualizada com sucesso!') : Alert.alert('Sucesso', 'Escala atualizada e motorista notificado.');
         setEditingShiftId(null);
         fetchActiveShifts();
-        setActiveTab('manage');
       } else {
-        Platform.OS === 'web' ? window.alert('Escala enviada com sucesso!') : Alert.alert('Sucesso', 'Escala enviada para o motorista.');
+        Platform.OS === 'web' ? window.alert('Escala criada com sucesso!') : Alert.alert('Sucesso', 'Escala criada e motorista notificado.');
       }
-
     } catch (e) {
-      console.log('Error creating/updating shift', e);
-      Platform.OS === 'web' ? window.alert('Erro ao salvar escala') : Alert.alert('Erro', 'Erro ao salvar escala.');
+      console.log('Error submitting shift', e);
+      Platform.OS === 'web' ? window.alert('Erro ao salvar escala') : Alert.alert('Erro', 'Ocorreu um problema ao salvar.');
     } finally {
       setLoading(false);
     }
@@ -198,7 +196,11 @@ export const ShiftsTab = () => {
     setEditingShiftId(shift.id);
     setDriverEmail(shift.driverEmail);
     setVehiclePlate(shift.vehiclePlate);
-    setStops(shift.stops || [{ id: Date.now().toString(), time: '', address: '', passengers: [] }]);
+    if (shift.stops && shift.stops.length > 0) {
+      setStops(shift.stops);
+    } else {
+      setStops([{ id: Date.now().toString(), time: '', address: '', passengers: [] }]);
+    }
     setActiveTab('create');
   };
 
@@ -210,11 +212,45 @@ export const ShiftsTab = () => {
     setActiveTab('manage');
   };
 
+  const handleDeleteShift = async (shiftId: string) => {
+    const performDelete = async () => {
+      setLoading(true);
+      try {
+        const db = getFirebaseDb();
+        await deleteDoc(doc(db, 'shifts', shiftId));
+        Platform.OS === 'web' ? window.alert('Escala excluída com sucesso!') : Alert.alert('Sucesso', 'Escala excluída com sucesso!');
+        fetchActiveShifts();
+      } catch (e) {
+        console.log('Error deleting shift', e);
+        Platform.OS === 'web' ? window.alert('Erro ao excluir escala') : Alert.alert('Erro', 'Ocorreu um erro ao excluir a escala.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirm = window.confirm('Deseja realmente excluir esta escala? Esta ação não pode ser desfeita.');
+      if (confirm) {
+        await performDelete();
+      }
+    } else {
+      Alert.alert(
+        'Confirmar Exclusão',
+        'Deseja realmente excluir esta escala? Esta ação não pode ser desfeita.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Excluir', style: 'destructive', onPress: performDelete }
+        ]
+      );
+    }
+  };
+
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Gestão de Escalas</Text>
-        <Text style={styles.subtitle}>Crie novos roteiros ou altere rotas em andamento.</Text>
+        <Text style={styles.title}>Gerenciamento de Escalas</Text>
+        <Text style={styles.subtitle}>Crie novas rotas ou acompanhe o progresso atual.</Text>
       </View>
 
       <View style={styles.tabSelector}>
@@ -382,10 +418,16 @@ export const ShiftsTab = () => {
                     <Text style={styles.activeShiftLabel}>Veículo: <Text style={styles.activeShiftValue}>{item.vehiclePlate}</Text></Text>
                     <Text style={styles.activeShiftLabel}>Paradas Restantes: <Text style={styles.activeShiftValue}>{item.stops?.length || 0}</Text></Text>
                   </View>
-                  <TouchableOpacity style={styles.editBtn} onPress={() => handleEditShift(item)}>
-                    <MaterialCommunityIcons name="pencil" size={16} color={colors.white} />
-                    <Text style={styles.editBtnText}>Alterar Rota</Text>
-                  </TouchableOpacity>
+                  <View style={styles.activeShiftActions}>
+                    <TouchableOpacity style={[styles.editBtn, { flex: 1 }]} onPress={() => handleEditShift(item)}>
+                      <MaterialCommunityIcons name="pencil" size={16} color={colors.white} />
+                      <Text style={styles.editBtnText}>Alterar Rota</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.deleteBtn, { flex: 1 }]} onPress={() => handleDeleteShift(item.id)}>
+                      <MaterialCommunityIcons name="trash-can" size={16} color={colors.white} />
+                      <Text style={styles.deleteBtnText}>Excluir</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
             />
@@ -451,5 +493,8 @@ const styles = StyleSheet.create({
   activeShiftLabel: { fontSize: 13, color: colors.graphiteLight, marginBottom: 4 },
   activeShiftValue: { fontWeight: 'bold', color: colors.graphite },
   editBtn: { backgroundColor: colors.graphite, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, gap: 5 },
-  editBtnText: { color: colors.white, fontWeight: 'bold', fontSize: 14 }
+  editBtnText: { color: colors.white, fontWeight: 'bold', fontSize: 14 },
+  activeShiftActions: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  deleteBtn: { backgroundColor: colors.red, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, gap: 5 },
+  deleteBtnText: { color: colors.white, fontWeight: 'bold', fontSize: 14 }
 });

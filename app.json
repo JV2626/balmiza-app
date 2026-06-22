@@ -9,16 +9,24 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.balmiza-app"
+      "bundleIdentifier": "com.balmizatransportes.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "O app Balmiza precisa da câmera para fotografar avarias e o hodômetro do veículo.",
+        "NSPhotoLibraryUsageDescription": "O app Balmiza precisa acessar a galeria para anexar fotos de avarias.",
+        "NSPhotoLibraryAddUsageDescription": "O app Balmiza precisa salvar fotos de registro."
+      }
     },
     "android": {
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
-        "android.permission.USE_BIOMETRIC"
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.POST_NOTIFICATIONS"
       ],
-      "package": "com.jv2626.balmizaapp"
+      "package": "com.jv2626.balmizaapp",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -27,16 +35,38 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Permissão para fotografar o hodômetro."
+          "cameraPermission": "O app Balmiza precisa da câmera para fotografar avarias e o hodômetro.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O app Balmiza acessa a galeria para registrar fotos de avarias.",
+          "cameraPermission": "O app Balmiza precisa da câmera para fotografar avarias e o hodômetro."
         }
       ],
       "expo-sharing",
-      "expo-local-authentication"
+      "expo-local-authentication",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#DF0A0A",
+          "defaultChannel": "default"
+        }
+      ]
     ],
     "extra": {
       "eas": {
         "projectId": "9a371ac6-7586-4c1c-8b60-aafef3456b58"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/9a371ac6-7586-4c1c-8b60-aafef3456b58"
     }
   }
 }

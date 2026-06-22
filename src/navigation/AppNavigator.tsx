@@ -8,63 +8,95 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { LoginScreen } from '../screens/LoginScreen';
 import { DriverHomeScreen } from '../screens/DriverHomeScreen';
 import { AdminTabNavigator } from '../screens/Admin/AdminTabNavigator';
-import { colors } from '../theme/colors';
+import { DamageReportScreen } from '../screens/DamageReportScreen';
+import { FavoriteLocationsScreen } from '../screens/FavoriteLocationsScreen';
+import { EmployeesManagementScreen } from '../screens/EmployeesManagementScreen';
+
+import { getFirebaseAuth, getFirebaseDb } from '../config/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 const Stack = createNativeStackNavigator();
 
 export function AppNavigator() {
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<'driver' | 'admin' | null>(null);
   const [initialRoute, setInitialRoute] = useState<'Login' | 'Home' | 'Admin'>('Login');
 
-  const checkSession = async () => {
-    try {
-      // Correção de Bug Crítico: Leitura correta do @userId e @userRole
-      const storedId = await AsyncStorage.getItem('@userId');
-      const role = await AsyncStorage.getItem('@userRole');
-      
-      if (storedId && role) {
-         if (Platform.OS !== 'web') {
-           const hasHardware = await LocalAuthentication.hasHardwareAsync();
-           const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-           
-           if (hasHardware && isEnrolled) {
+  useEffect(() => {
+    const auth = getFirebaseAuth();
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      try {
+        if (user) {
+          const cleanEmail = user.email ? user.email.toLowerCase().trim() : '';
+          const db = getFirebaseDb();
+          const userRef = doc(db, 'usuarios', cleanEmail);
+          const userSnap = await getDoc(userRef);
+          
+          let role: 'driver' | 'admin' = 'driver';
+          if (userSnap.exists()) {
+            const uData = userSnap.data();
+            role = (uData.role as 'driver' | 'admin') || 'driver';
+          } else {
+            // Deslogar se o usuário não tiver registro no Firestore
+            await auth.signOut();
+            await AsyncStorage.clear();
+            setUserRole(null);
+            setInitialRoute('Login');
+            setLoading(false);
+            return;
+          }
+
+          // Atualizar AsyncStorage com informações confiáveis vindas do Firestore
+          await AsyncStorage.setItem('@userId', user.uid);
+          await AsyncStorage.setItem('@userRole', role);
+          if (cleanEmail) {
+            await AsyncStorage.setItem('@userEmail', cleanEmail);
+          }
+          
+          setUserRole(role);
+
+          if (Platform.OS !== 'web') {
+            const hasHardware = await LocalAuthentication.hasHardwareAsync();
+            const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+            
+            if (hasHardware && isEnrolled) {
               const authResult = await LocalAuthentication.authenticateAsync({
-                 promptMessage: 'Acesso Restrito - Grupo Balmiza',
-                 fallbackLabel: 'Usar Senha',
-                 cancelLabel: 'Cancelar',
+                promptMessage: 'Acesso Restrito - Grupo Balmiza',
+                fallbackLabel: 'Usar Senha',
+                cancelLabel: 'Cancelar',
               });
               
               if (authResult.success) {
-                 setInitialRoute(role === 'admin' ? 'Admin' : 'Home');
+                setInitialRoute(role === 'admin' ? 'Admin' : 'Home');
               } else {
-                 setInitialRoute('Login');
+                setInitialRoute('Login');
               }
-           } else {
+            } else {
               setInitialRoute(role === 'admin' ? 'Admin' : 'Home');
-           }
-         } else {
-            // Web ou Sem Biometria, entra direto
+            }
+          } else {
             setInitialRoute(role === 'admin' ? 'Admin' : 'Home');
-         }
-      } else {
-         setInitialRoute('Login');
+          }
+        } else {
+          setUserRole(null);
+          setInitialRoute('Login');
+        }
+      } catch (e) {
+        console.log('Erro na validação de sessão:', e);
+        setUserRole(null);
+        setInitialRoute('Login');
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      console.log('Erro ao ler AsyncStorage ou Biometria:', e);
-      setInitialRoute('Login');
-    } finally {
-      setLoading(false);
-    }
-  };
+    });
 
-  useEffect(() => {
-    checkSession();
+    return () => unsubscribe();
   }, []);
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.red} />
+        <ActivityIndicator size="large" color="#1C1C1E" />
       </View>
     );
   }
@@ -72,10 +104,18 @@ export function AppNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
-        {/* Todas as telas declaradas para permitir a navegação (fix do Admin Crash) */}
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Home" component={DriverHomeScreen} />
-        <Stack.Screen name="Admin" component={AdminTabNavigator} />
+        <Stack.Screen name="DamageReport" component={DamageReportScreen} />
+
+        {/* Telas administrativas protegidas e condicionalmente declaradas */}
+        {userRole === 'admin' && (
+          <>
+            <Stack.Screen name="Admin" component={AdminTabNavigator} />
+            <Stack.Screen name="EmployeesManagement" component={EmployeesManagementScreen} />
+            <Stack.Screen name="FavoriteLocations" component={FavoriteLocationsScreen} />
+          </>
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );

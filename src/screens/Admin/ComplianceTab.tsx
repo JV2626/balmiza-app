@@ -4,6 +4,7 @@ import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getFirebaseDb } from '../../config/firebase';
 import { colors } from '../../theme/colors';
+import { AnimatedCard } from '../../components/AnimatedCard';
 
 export const ComplianceTab = () => {
   const [trips, setTrips] = useState<any[]>([]);
@@ -44,8 +45,8 @@ export const ComplianceTab = () => {
           {trips.length === 0 ? (
             <Text style={styles.emptyText}>Nenhuma viagem registrada ainda.</Text>
           ) : (
-            trips.map((trip) => (
-              <View key={trip.id} style={styles.tripCard}>
+            trips.map((trip, index) => (
+              <AnimatedCard key={trip.id} style={styles.tripCard} delay={Math.min(index * 70, 700)}>
                 <View style={styles.tripInfo}>
                   <Text style={styles.tripDate}>
                     {trip.closedAt ? new Date(trip.closedAt.seconds * 1000).toLocaleString() : 'Data Desconhecida'}
@@ -76,7 +77,7 @@ export const ComplianceTab = () => {
                     <MaterialCommunityIcons name="image-off-outline" size={24} color="#ccc" />
                   </View>
                 )}
-              </View>
+              </AnimatedCard>
             ))
           )}
         </ScrollView>

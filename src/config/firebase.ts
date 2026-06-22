@@ -3,13 +3,13 @@ import 'firebase/compat/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyA7gKNXULnhUM-dww-1B9B6U49n2Guw2lw",
-  authDomain: "balmiza-app.firebaseapp.com",
-  projectId: "balmiza-app",
-  storageBucket: "balmiza-app.firebasestorage.app",
-  messagingSenderId: "337134984837",
-  appId: "1:337134984837:web:a3f66672a464e89c3dd3ec",
-  measurementId: "G-XSV8YRZRKJ"
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
 export const getFirebaseApp = () => {

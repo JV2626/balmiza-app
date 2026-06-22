@@ -1,95 +1,75 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Platform } from 'react-native';
-import { collection, query, where, onSnapshot, doc, setDoc } from 'firebase/firestore';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Linking, Platform, Animated, Clipboard } from 'react-native';
+import { collection, query, where, onSnapshot, doc, setDoc, getDocs } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
-import Constants from 'expo-constants';
 import { getFirebaseDb } from '../config/firebase';
-import { colors } from '../theme/colors';
-import { OilStatusCard } from '../components/OilStatusCard';
-import { PreTripChecklistModal } from '../components/PreTripChecklistModal';
 import { TripClosingModal } from '../components/TripClosingModal';
+import { ChecklistModal } from '../components/ChecklistModal';
+import { AnimatedCard } from '../components/AnimatedCard';
+import { GPSModal } from '../components/GPSModal';
+import { ReembolsoModal } from '../components/ReembolsoModal';
+import { DriverAIChatModal } from '../components/DriverAIChatModal';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+const colors = {
+  white: '#FFFFFF',
+  graphite: '#1C1C1E',
+  graphiteLight: '#6B7280',
+  green: '#2F855A',
+  red: '#E53E3E',
+  border: '#E5E7EB',
+  background: '#F4F6F8'
+};
 
 export const DriverHomeScreen = ({ navigation }: any) => {
   const [loading, setLoading] = useState(true);
   const [driverEmail, setDriverEmail] = useState('');
-  const [activeShift, setActiveShift] = useState<any>(null);
+  const [pendingShifts, setPendingShifts] = useState<any[]>([]);
+  
+  const [closingTrip, setClosingTrip] = useState<any>(null);
+  const [startingTrip, setStartingTrip] = useState<any>(null);
 
-  const [checklistVisible, setChecklistVisible] = useState(false);
-  const [closingVisible, setClosingVisible] = useState(false);
-  const [activeTripId, setActiveTripId] = useState<string | null>(null);
+  const [allocatedVehicle, setAllocatedVehicle] = useState<string | null>(null);
+  const [allActiveVehicles, setAllActiveVehicles] = useState<any[]>([]);
+  const [showVehiclePicker, setShowVehiclePicker] = useState(false);
+  const [selectedPassengerForGPS, setSelectedPassengerForGPS] = useState<any>(null);
+  
+  const [showReembolso, setShowReembolso] = useState(false);
+  const [showAIChat, setShowAIChat] = useState(false);
 
   useEffect(() => {
     loadUser();
   }, []);
 
-  async function registerForPushNotificationsAsync() {
-    let token;
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF231F7C',
-      });
-    }
-
-    if (Device.isDevice) {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      if (finalStatus !== 'granted') {
-        return;
-      }
-      
-      const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
-      if (!projectId) {
-        token = (await Notifications.getExpoPushTokenAsync()).data;
-      } else {
-        token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-      }
-    }
-
-    return token;
-  }
-
   const loadUser = async () => {
-    let email = await AsyncStorage.getItem('@userEmail');
-    if (!email) email = 'teste@balmiza.com';
+    const email = await AsyncStorage.getItem('@userEmail');
+    if (!email) {
+      navigation.replace('Login');
+      return;
+    }
     
     setDriverEmail(email);
-    
     const db = getFirebaseDb();
     
-    // Configura Push Notifications
-    try {
-      const token = await registerForPushNotificationsAsync();
-      if (token) {
-        await setDoc(doc(db, 'users', email), { pushToken: token }, { merge: true });
+    const driverRef = doc(db, 'usuarios', email.toLowerCase());
+    const unsubDriver = onSnapshot(driverRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const dData = docSnap.data();
+        setAllocatedVehicle(dData?.veiculoAlocado || null);
       }
-    } catch (e) {
-      console.log('Push notification error', e);
-    }
+    });
 
-    // Escuta em Tempo Real (Real-time listener)
+    // Carregar veículos ativos
+    try {
+      const vSnap = await getDocs(query(collection(db, 'veiculos'), where('ativo', '==', true)));
+      setAllActiveVehicles(vSnap.docs.map((d: any) => ({ id: d.id, ...d.data() as any })));
+    } catch (e) {
+      console.log('Error loading vehicles for driver', e);
+    }
+    
     const q = query(
-      collection(db, 'shifts'), 
-      where('driverEmail', '==', email),
+      collection(db, 'viagens'), 
+      where('motoristaId', '==', email.toLowerCase()),
       where('status', 'in', ['pending', 'active'])
     );
     
@@ -97,14 +77,54 @@ export const DriverHomeScreen = ({ navigation }: any) => {
       if (!snapshot.empty) {
         const shifts = snapshot.docs.map(d => ({ id: d.id, ...d.data() as any }));
         shifts.sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis());
-        setActiveShift(shifts[0]);
+        setPendingShifts(shifts);
       } else {
-        setActiveShift(null);
+        setPendingShifts([]);
       }
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubDriver();
+      unsubscribe();
+    };
+  };
+
+  const handleSelectVehicle = async (placa: string) => {
+    try {
+      const db = getFirebaseDb();
+      const driverRef = doc(db, 'usuarios', driverEmail.toLowerCase());
+      await setDoc(driverRef, { veiculoAlocado: placa }, { merge: true });
+      setAllocatedVehicle(placa);
+      setShowVehiclePicker(false);
+      const found = allActiveVehicles.find(v => v.placa === placa);
+      const vehicleLabel = found ? `${found.modelo} - ${found.placa}` : placa;
+      Alert.alert('Sucesso', `Seu veículo atual foi definido como ${vehicleLabel}.`);
+    } catch (e) {
+      Alert.alert('Erro', 'Não foi possível atualizar o veículo.');
+    }
+  };
+
+  const getSelectedVehicleModel = () => {
+    if (!allocatedVehicle) return 'NENHUM ALOCADO';
+    const found = allActiveVehicles.find(v => v.placa === allocatedVehicle);
+    return found ? `${found.modelo} - ${found.placa}` : allocatedVehicle;
+  };
+
+  const handleStartTrip = async () => {
+    if (!startingTrip) return;
+    try {
+      const db = getFirebaseDb();
+      const horaAtual = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      await setDoc(doc(db, 'viagens', startingTrip.id), { 
+        status: 'active', 
+        horaInicio: horaAtual,
+        checklistRealizado: true
+      }, { merge: true });
+      setStartingTrip(null);
+    } catch (e) {
+      Alert.alert('Erro', 'Falha ao iniciar viagem. Verifique sua conexão.');
+    }
   };
 
   const handleLogout = async () => {
@@ -114,26 +134,48 @@ export const DriverHomeScreen = ({ navigation }: any) => {
     navigation.replace('Login');
   };
 
-  const handleStartTrip = () => {
-    setChecklistVisible(true);
+  const openMultiStopRoute = (shift: any) => {
+    if (!shift.passageiros || shift.passageiros.length === 0) return;
+
+    const cleanAddressForGeocoding = (addr: string): string => {
+      let clean = addr.replace(/\(.*?\)/g, '');
+      const parts = clean.split('-');
+      if (parts.length > 1 && /\d/.test(parts[0])) {
+        clean = parts[0];
+      }
+      return clean.trim();
+    };
+
+    const waypoints = shift.passageiros
+      .map((p: any) => {
+        const addr = p.endereco || p.nome;
+        let clean = cleanAddressForGeocoding(addr);
+        if (!clean.toLowerCase().includes('tatuí') && !clean.toLowerCase().includes('tatui') && !clean.toLowerCase().includes('sorocaba') && !clean.toLowerCase().includes('boituva') && !clean.toLowerCase().includes('itapetininga')) {
+          clean += ', Itapetininga, SP';
+        }
+        return encodeURIComponent(clean);
+      })
+      .join('%7C');
+
+    const destinoFinal = shift.destino || 'JBS Tatuí';
+    let cleanDestino = cleanAddressForGeocoding(destinoFinal);
+    if (!cleanDestino.toLowerCase().includes('tatuí') && !cleanDestino.toLowerCase().includes('tatui') && !cleanDestino.toLowerCase().includes('sorocaba') && !cleanDestino.toLowerCase().includes('boituva') && !cleanDestino.toLowerCase().includes('itapetininga')) {
+      cleanDestino += ', Itapetininga, SP';
+    }
+
+    const url = `https://www.google.com/maps/dir/?api=1&origin=&destination=${encodeURIComponent(cleanDestino)}&waypoints=${waypoints}`;
+    
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Erro', 'Não foi possível abrir o Google Maps.');
+    });
   };
 
-  const handleTripStarted = (tripId?: string) => {
-    if (tripId) setActiveTripId(tripId);
-    setChecklistVisible(false);
-  };
 
-  const handleSOS = () => {
-    alert("SOS ATIVADO! Central notificada com sua localização de emergência.");
-  };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Olá, motorista!</Text>
-          <Text style={styles.subtitle}>Sua pontuação de segurança está excelente.</Text>
-        </View>
+        <Text style={styles.greeting}>Olá, {driverEmail.split('@')[0]}</Text>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
           <MaterialCommunityIcons name="logout" size={24} color={colors.red} />
         </TouchableOpacity>
@@ -141,148 +183,265 @@ export const DriverHomeScreen = ({ navigation }: any) => {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         
-        <View style={styles.scoreCard}>
-          <View style={styles.scoreHeader}>
-            <MaterialCommunityIcons name="shield-star" size={32} color="#FFD700" />
-            <Text style={styles.scoreTitle}>Driver Score</Text>
-          </View>
-          <View style={styles.scoreValueContainer}>
-            <Text style={styles.scoreValue}>98</Text>
-            <Text style={styles.scoreTotal}>/100</Text>
-          </View>
-          <Text style={styles.scoreMessage}>Você está no Top 5% de condução segura neste mês!</Text>
-          <View style={styles.scoreBarBg}>
-            <View style={[styles.scoreBarFill, { width: '98%' }]} />
-          </View>
-        </View>
-
-        {loading ? (
-          <ActivityIndicator size="large" color={colors.red} />
-        ) : activeShift ? (
-          <View style={styles.shiftCard}>
-            <View style={styles.shiftHeader}>
-              <View style={styles.pulseDot} />
-              <Text style={styles.shiftTitle}>{activeTripId ? 'Viagem em Andamento' : 'Nova Escala Designada'}</Text>
+        {/* Painel de Carro Alocado do Motorista */}
+        <View style={styles.vehicleCardContainer}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <MaterialCommunityIcons name="steering" size={32} color="#DF0A0A" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.vehicleSecLabel}>SEU CARRO DE HOJE</Text>
+              <Text style={styles.vehicleSecValue}>
+                {getSelectedVehicleModel()}
+              </Text>
             </View>
-            <View style={styles.shiftBody}>
-              <Text style={styles.shiftLabel}>Veículo:</Text>
-              <Text style={styles.shiftValue}>{activeShift.vehiclePlate}</Text>
-              
-              <Text style={[styles.shiftLabel, {marginTop: 15, marginBottom: 10}]}>Roteiro Estruturado:</Text>
-              <View style={styles.timelineContainer}>
-                {activeShift.stops?.map((stop: any, idx: number) => (
-                  <View key={idx} style={styles.timelineItem}>
-                    <View style={styles.timelineIconContainer}>
-                      <View style={styles.timelineDot} />
-                      {idx !== activeShift.stops.length - 1 && <View style={styles.timelineLine} />}
-                    </View>
-                    <View style={styles.timelineContent}>
-                      <Text style={styles.timelineTime}>{stop.time}</Text>
-                      <Text style={styles.timelineAddress}>{stop.address}</Text>
-                      {stop.passengers && stop.passengers.length > 0 && (
-                        <View style={styles.passengerList}>
-                          {stop.passengers.map((pass: string, pIdx: number) => (
-                            <View key={pIdx} style={styles.passengerRow}>
-                              <MaterialCommunityIcons name="account" size={14} color="rgba(255,255,255,0.8)" />
-                              <Text style={styles.passengerName}>{pass}</Text>
-                            </View>
-                          ))}
-                        </View>
-                      )}
-                    </View>
-                  </View>
+            <TouchableOpacity style={styles.vehicleSwapBtn} onPress={() => setShowVehiclePicker(!showVehiclePicker)}>
+              <Text style={styles.vehicleSwapBtnText}>TROCAR</Text>
+            </TouchableOpacity>
+          </View>
+
+          {showVehiclePicker && (
+            <View style={styles.pickerWrapper}>
+              <Text style={styles.pickerHeadline}>Selecione o veículo que você está usando:</Text>
+              <View style={styles.pickerGrid}>
+                {allActiveVehicles.map((v) => (
+                  <TouchableOpacity
+                    key={v.id}
+                    style={[
+                      styles.pickerChip,
+                      allocatedVehicle === v.placa && styles.pickerChipActive
+                    ]}
+                    onPress={() => handleSelectVehicle(v.placa)}
+                  >
+                    <Text style={[
+                      styles.pickerChipText,
+                      allocatedVehicle === v.placa && { color: colors.white }
+                    ]}>
+                      {v.modelo} - {v.placa}
+                    </Text>
+                  </TouchableOpacity>
                 ))}
               </View>
             </View>
-            {activeTripId ? (
-              <TouchableOpacity 
-                style={[styles.primaryBtn, {backgroundColor: colors.graphite}]}
-                onPress={() => setClosingVisible(true)}
-              >
-                <MaterialCommunityIcons name="stop-circle-outline" size={20} color={colors.white} />
-                <Text style={styles.btnText}>Finalizar Viagem</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={styles.primaryBtn} onPress={handleStartTrip}>
-                <MaterialCommunityIcons name="check-decagram" size={20} color={colors.white} />
-                <Text style={styles.btnText}>Checklist & Iniciar</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          )}
+        </View>
+
+        <TouchableOpacity style={styles.damageBtn} onPress={() => navigation.navigate('DamageReport')}>
+          <MaterialCommunityIcons name="car-wrench" size={24} color={colors.graphite} />
+          <Text style={styles.damageBtnText}>RELATAR PROBLEMA NO CARRO</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.damageBtn, { borderColor: colors.green }]} onPress={() => setShowReembolso(true)}>
+          <MaterialCommunityIcons name="cash-multiple" size={24} color={colors.green} />
+          <Text style={[styles.damageBtnText, { color: colors.green }]}>SOLICITAR REEMBOLSO</Text>
+        </TouchableOpacity>
+
+        {loading ? (
+          <ActivityIndicator size="large" color={colors.graphite} style={{marginTop: 50}} />
+        ) : pendingShifts.length > 0 ? (
+          pendingShifts.map((shift) => (
+            <AnimatedCard key={shift.id} style={styles.shiftCard}>
+              <Text style={styles.shiftTitle}>ROTEIRO DE HOJE</Text>
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>CARRO:</Text>
+                <Text style={styles.infoValue}>{shift.carroPlaca}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>SENTIDO:</Text>
+                <Text style={styles.infoValue}>{shift.destino || 'Casa X JBS'}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>DATA:</Text>
+                <Text style={styles.infoValue}>{shift.data}</Text>
+              </View>
+
+              <View style={styles.divider} />
+              <Text style={styles.passengersTitle}>PASSAGEIROS</Text>
+              
+              {shift.passageiros && shift.passageiros.length > 0 && (
+                <TouchableOpacity 
+                  style={styles.multiRouteBtn} 
+                  onPress={() => openMultiStopRoute(shift)}
+                >
+                  <MaterialCommunityIcons name="map-marker-multiple" size={20} color={colors.white} />
+                  <Text style={styles.multiRouteBtnText}>Iniciar Rota Completa (Multi-Paradas) 🗺️</Text>
+                </TouchableOpacity>
+              )}
+              
+              {shift.passageiros?.map((p: any, idx: number) => (
+                <View key={idx} style={styles.passengerBox}>
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={styles.pName}>{idx + 1}. {p.nome}</Text>
+                    <Text style={styles.pAddress}>{p.endereco}</Text>
+                    {p.setor ? (
+                      <View style={styles.actionBadge}>
+                        <MaterialCommunityIcons name="clipboard-text-play" size={14} color="#B45309" />
+                        <Text style={styles.actionText}>{p.setor}</Text>
+                      </View>
+                    ) : null}
+                    <Text style={styles.pTime}>T: {p.horarioEntrada} - {p.horarioSaida}</Text>
+                  </View>
+                  {p.endereco || (p.latitude && p.longitude) ? (
+                    <TouchableOpacity style={styles.wazeIconBtn} onPress={() => setSelectedPassengerForGPS(p)}>
+                      <MaterialCommunityIcons name="google-maps" size={32} color="#DF0A0A" />
+                      <Text style={[styles.wazeBtnText, { color: '#DF0A0A' }]}>NAV</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ))}
+
+              <View style={{height: 20}} />
+
+              {shift.status === 'pending' ? (
+                <TouchableOpacity style={styles.startBtn} onPress={() => setStartingTrip(shift)}>
+                  <Text style={styles.btnText}>INICIAR VIAGEM</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.endBtn} onPress={() => setClosingTrip(shift)}>
+                  <Text style={styles.btnText}>FINALIZAR VIAGEM</Text>
+                </TouchableOpacity>
+              )}
+            </AnimatedCard>
+          ))
         ) : (
-          <View style={styles.emptyCard}>
-            <MaterialCommunityIcons name="clipboard-text-off-outline" size={40} color={colors.graphiteLight} />
-            <Text style={styles.emptyText}>Nenhuma escala designada para você hoje.</Text>
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyTextGarrafal}>SEM ESCALAS PARA HOJE</Text>
+            <Text style={styles.emptySub}>Você está livre. Aproveite o descanso!</Text>
+            <TouchableOpacity 
+               style={{width: 50, height: 50, marginTop: 50}} 
+               onPress={() => setClosingTrip({ id: 'test', carroPlaca: 'TEST', kmInicial: 10000, motoristaNome: 'Teste' })}
+               onLongPress={() => Alert.alert('Modo Teste')}
+            />
           </View>
         )}
-
-        <OilStatusCard />
-
       </ScrollView>
 
-      <TouchableOpacity style={styles.sosButton} onPress={handleSOS}>
-        <MaterialCommunityIcons name="car-emergency" size={28} color={colors.white} />
+      {closingTrip && (
+        <TripClosingModal
+          visible={!!closingTrip}
+          onClose={() => setClosingTrip(null)}
+          tripData={closingTrip}
+        />
+      )}
+
+      {startingTrip && (
+        <ChecklistModal
+          visible={!!startingTrip}
+          onClose={() => setStartingTrip(null)}
+          onConfirm={handleStartTrip}
+        />
+      )}
+
+      <GPSModal
+        visible={!!selectedPassengerForGPS}
+        onClose={() => setSelectedPassengerForGPS(null)}
+        passenger={selectedPassengerForGPS}
+      />
+
+      <ReembolsoModal
+        visible={showReembolso}
+        onClose={() => setShowReembolso(false)}
+        driverEmail={driverEmail}
+      />
+
+      <DriverAIChatModal
+        visible={showAIChat}
+        onClose={() => setShowAIChat(false)}
+        driverEmail={driverEmail}
+      />
+
+      {/* Botão Flutuante (FAB) da IA */}
+      <TouchableOpacity 
+        style={styles.fab} 
+        onPress={() => setShowAIChat(true)}
+        activeOpacity={0.8}
+      >
+        <MaterialCommunityIcons name="robot" size={28} color={colors.white} />
       </TouchableOpacity>
-
-      <PreTripChecklistModal 
-        visible={checklistVisible}
-        onClose={() => setChecklistVisible(false)}
-        onTripStarted={handleTripStarted}
-        activeShiftId={activeShift?.id}
-      />
-
-      <TripClosingModal
-        visible={closingVisible}
-        onClose={() => {
-          setClosingVisible(false);
-          setActiveTripId(null);
-        }}
-        tripId={activeTripId || ''}
-        activeShiftId={activeShift?.id}
-      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 60, backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: colors.border },
-  greeting: { fontSize: 24, fontWeight: '900', color: colors.graphite },
-  subtitle: { fontSize: 13, color: colors.graphiteLight, marginTop: 4 },
-  logoutBtn: { padding: 8, backgroundColor: '#FFF5F5', borderRadius: 8 },
-  content: { padding: 20, paddingBottom: 100 },
-  scoreCard: { backgroundColor: colors.graphite, padding: 20, borderRadius: 16, marginBottom: 20, elevation: 5 },
-  scoreHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 15 },
-  scoreTitle: { color: colors.white, fontSize: 18, fontWeight: '800' },
-  scoreValueContainer: { flexDirection: 'row', alignItems: 'baseline' },
-  scoreValue: { color: colors.white, fontSize: 40, fontWeight: '900' },
-  scoreTotal: { color: 'rgba(255,255,255,0.5)', fontSize: 18, fontWeight: 'bold', marginLeft: 2 },
-  scoreMessage: { color: 'rgba(255,255,255,0.8)', fontSize: 13, marginTop: 10, marginBottom: 15 },
-  scoreBarBg: { height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' },
-  scoreBarFill: { height: '100%', backgroundColor: '#FFD700' },
-  shiftCard: { backgroundColor: colors.red, borderRadius: 16, overflow: 'hidden', marginBottom: 20, elevation: 4 },
-  shiftHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 15, backgroundColor: 'rgba(0,0,0,0.1)' },
-  pulseDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#4ADE80' },
-  shiftTitle: { color: colors.white, fontSize: 16, fontWeight: 'bold' },
-  shiftBody: { padding: 20, paddingTop: 10 },
-  shiftLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase' },
-  shiftValue: { color: colors.white, fontSize: 20, fontWeight: '800', marginTop: 2 },
-  timelineContainer: { backgroundColor: 'rgba(0,0,0,0.15)', padding: 15, borderRadius: 12 },
-  timelineItem: { flexDirection: 'row', marginBottom: 15 },
-  timelineIconContainer: { alignItems: 'center', marginRight: 15, width: 20 },
-  timelineDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: colors.white, borderWidth: 3, borderColor: 'rgba(255,255,255,0.3)' },
-  timelineLine: { width: 2, flex: 1, backgroundColor: 'rgba(255,255,255,0.3)', marginVertical: 4 },
-  timelineContent: { flex: 1, paddingBottom: 5 },
-  timelineTime: { color: '#FFD700', fontSize: 14, fontWeight: 'bold' },
-  timelineAddress: { color: colors.white, fontSize: 16, fontWeight: '800', marginTop: 2 },
-  passengerList: { marginTop: 8, backgroundColor: 'rgba(0,0,0,0.1)', padding: 8, borderRadius: 8 },
-  passengerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  passengerName: { color: 'rgba(255,255,255,0.9)', fontSize: 13, marginLeft: 5, fontWeight: '500' },
-  emptyCard: { backgroundColor: colors.white, padding: 30, borderRadius: 16, alignItems: 'center', marginBottom: 20, borderWidth: 1, borderColor: colors.border },
-  emptyText: { color: colors.graphiteLight, fontSize: 16, fontWeight: 'bold', marginTop: 10, textAlign: 'center' },
-  tripActiveCard: { backgroundColor: colors.white, padding: 30, borderRadius: 16, alignItems: 'center', marginBottom: 20, borderWidth: 2, borderColor: colors.red },
-  tripActiveText: { fontSize: 18, fontWeight: 'bold', color: colors.graphite, marginVertical: 15 },
-  primaryBtn: { backgroundColor: colors.graphite, padding: 18, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, margin: 20, marginTop: 0 },
-  btnText: { color: colors.white, fontWeight: 'bold', fontSize: 16 },
-  sosButton: { position: 'absolute', bottom: 30, right: 30, width: 65, height: 65, borderRadius: 35, backgroundColor: colors.red, justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 60, backgroundColor: colors.white, elevation: 3, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.1, shadowRadius: 3, zIndex: 10 },
+  greeting: { fontSize: 24, fontWeight: '900', color: colors.graphite, textTransform: 'uppercase' },
+  logoutBtn: { padding: 10, backgroundColor: '#FFF5F5', borderRadius: 8 },
+  content: { padding: 20, paddingBottom: 135 }, 
+  damageBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white, borderWidth: 2, borderColor: colors.border, height: 58, borderRadius: 12, marginBottom: 30, gap: 10, elevation: 2, shadowColor: '#000', shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 2 },
+  damageBtnText: { fontSize: 16, fontWeight: '900', color: colors.graphite, textTransform: 'uppercase' },
+  
+  shiftCard: { backgroundColor: colors.white, borderRadius: 12, padding: 20, marginBottom: 20, elevation: 3, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.1, shadowRadius: 3 },
+  shiftTitle: { fontSize: 22, fontWeight: '900', color: colors.graphite, marginBottom: 20, textAlign: 'center', textTransform: 'uppercase' },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  infoLabel: { fontSize: 16, fontWeight: '900', color: colors.graphiteLight, textTransform: 'uppercase' },
+  infoValue: { fontSize: 20, fontWeight: '900', color: colors.graphite },
+  divider: { height: 2, backgroundColor: colors.border, marginVertical: 20 },
+  passengersTitle: { fontSize: 18, fontWeight: '900', color: colors.graphite, marginBottom: 15, textTransform: 'uppercase' },
+  multiRouteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#DF0A0A',
+    height: 48,
+    borderRadius: 10,
+    marginBottom: 15,
+    gap: 8,
+    shadowColor: '#DF0A0A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  multiRouteBtnText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  
+  passengerBox: { backgroundColor: colors.background, padding: 15, borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  pName: { fontSize: 18, fontWeight: 'bold', color: colors.graphite },
+  pAddress: { fontSize: 14, color: colors.graphite, marginTop: 5 },
+  pTime: { fontSize: 14, fontWeight: 'bold', color: colors.graphiteLight, marginTop: 5 },
+  
+  wazeIconBtn: { alignItems: 'center', justifyContent: 'center', paddingLeft: 15, borderLeftWidth: 1, borderLeftColor: colors.border },
+  wazeBtnText: { fontSize: 10, fontWeight: '900', color: '#00C4FF', marginTop: 2, textTransform: 'uppercase' },
+  
+  startBtn: { backgroundColor: colors.green, height: 58, borderRadius: 12, justifyContent: 'center', alignItems: 'center', shadowColor: colors.green, shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.4, shadowRadius: 5, elevation: 4 },
+  endBtn: { backgroundColor: colors.red, height: 58, borderRadius: 12, justifyContent: 'center', alignItems: 'center', shadowColor: colors.red, shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.4, shadowRadius: 5, elevation: 4 },
+  btnText: { color: colors.white, fontSize: 20, fontWeight: '900', textTransform: 'uppercase' },
+  
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 100 },
+  emptyTextGarrafal: { fontSize: 40, fontWeight: '900', color: colors.graphite, textAlign: 'center', lineHeight: 45, textTransform: 'uppercase' },
+  emptySub: { fontSize: 18, color: colors.graphiteLight, textAlign: 'center', marginTop: 15, fontWeight: 'bold' },
+  vehicleCardContainer: { backgroundColor: colors.white, padding: 20, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 20, elevation: 3, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.1, shadowRadius: 3 },
+  vehicleSecLabel: { fontSize: 12, fontWeight: '900', color: colors.graphiteLight },
+  vehicleSecValue: { fontSize: 18, fontWeight: '900', color: colors.graphite, marginTop: 2 },
+  vehicleSwapBtn: { backgroundColor: colors.background, paddingVertical: 10, paddingHorizontal: 15, borderRadius: 8, borderWidth: 2, borderColor: colors.border },
+  vehicleSwapBtnText: { fontSize: 12, fontWeight: '900', color: colors.graphite },
+  pickerWrapper: { borderTopWidth: 2, borderTopColor: colors.border, marginTop: 15, paddingTop: 15 },
+  pickerHeadline: { fontSize: 14, fontWeight: 'bold', color: colors.graphite, marginBottom: 12 },
+  pickerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pickerChip: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 6 },
+  pickerChipActive: { backgroundColor: colors.graphite, borderColor: colors.graphite },
+  pickerChipText: { fontSize: 13, fontWeight: 'bold', color: colors.graphite },
+  actionBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 6, gap: 5, marginTop: 5, alignSelf: 'flex-start' },
+  actionText: { fontSize: 11, fontWeight: 'bold', color: '#B45309' },
+  fab: {
+    position: 'absolute',
+    bottom: 25,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#DF0A0A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.27,
+    shadowRadius: 4.65,
+    zIndex: 99
+  }
 });

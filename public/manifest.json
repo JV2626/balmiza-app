@@ -1,0 +1,21 @@
+{
+  "short_name": "Balmiza",
+  "name": "Balmiza Transportes",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#FFFFFF",
+  "theme_color": "#DF0A0A",
+  "display": "standalone",
+  "orientation": "portrait"
+}

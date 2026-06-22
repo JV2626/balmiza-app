@@ -1,0 +1,76 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper para verificar se o usuário é admin
+    function isAdmin() {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.token.email)) &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.token.email)).data.role == 'admin';
+    }
+
+    // Helper para verificar se o usuário está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Regras para a coleção usuarios
+    match /usuarios/{email} {
+      allow read: if isAuthenticated() && (request.auth.token.email.toLowerCase() == email.toLowerCase() || isAdmin());
+      // Usuários comuns só podem se cadastrar/atualizar se mantiverem/definirem a role como 'driver'
+      allow create: if isAdmin() || (isAuthenticated() && request.auth.token.email.toLowerCase() == email.toLowerCase() && request.resource.data.role == 'driver');
+      allow update: if isAdmin() || (isAuthenticated() && request.auth.token.email.toLowerCase() == email.toLowerCase() && request.resource.data.role == resource.data.role);
+      allow delete: if isAdmin();
+    }
+
+    // Regras para a coleção viagens
+    match /viagens/{tripId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAdmin();
+      // Admins podem atualizar tudo. Motoristas só podem atualizar se forem os motoristas atribuídos à viagem.
+      allow update: if isAdmin() || (
+        isAuthenticated() && 
+        (resource.data.motoristaId == request.auth.token.email.toLowerCase() || resource.data.motoristaEmail == request.auth.token.email.toLowerCase())
+      );
+    }
+
+    // Regras para veiculos
+    match /veiculos/{vehicleId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Regras para funcionarios
+    match /funcionarios/{empId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Regras para locais_favoritos
+    match /locais_favoritos/{locId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Regras para avarias
+    match /avarias/{reportId} {
+      allow read: if isAuthenticated();
+      // Qualquer motorista autenticado pode criar um relatório de avaria. Apenas admins deletam ou atualizam o status.
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // Regras para reembolsos
+    match /reembolsos/{reimbId} {
+      allow read: if isAuthenticated() && (resource.data.motoristaId == request.auth.token.email.toLowerCase() || isAdmin());
+      // Motoristas só podem criar seus próprios reembolsos. Apenas admins deletam/editam o status.
+      allow create: if isAuthenticated() && request.resource.data.motoristaId == request.auth.token.email.toLowerCase();
+      allow update, delete: if isAdmin();
+    }
+
+    // Regras para shifts
+    match /shifts/{shiftId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}

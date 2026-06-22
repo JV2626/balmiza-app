@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "337134984837",
+    "project_id": "balmiza-app",
+    "storage_bucket": "balmiza-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:337134984837:android:50aa4a4ab99fe53a3dd3ec",
+        "android_client_info": {
+          "package_name": "com.jv2626.balmizaapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCtnNwwSt_d2qQj_gadWFMx5FRcJ3SkMs8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
