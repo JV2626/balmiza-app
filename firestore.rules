@@ -12,29 +12,39 @@ service cloud.firestore {
       return request.auth != null && request.auth.token != null;
     }
 
-    // Helper para verificar se o usuário possui cargo de administrador no Firestore (com e-mail formatado em minúsculo)
+    // Helper para verificar se o token do usuário contém e-mail válido
+    function hasEmail() {
+      return isAuthenticated() && 'email' in request.auth.token && request.auth.token.email != null;
+    }
+
+    // Helper para verificar se o usuário possui cargo de administrador no Firestore
     function isAdmin() {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/usuarios/$(request.auth.token.email.lower())) &&
-        get(/databases/$(database)/documents/usuarios/$(request.auth.token.email.lower())).data.role == 'admin';
+      return hasEmail() && 
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.token.email)) &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.token.email)).data.role == 'admin';
     }
 
     // Coleção: usuarios (Perfis e cargos dos usuários do app)
     match /usuarios/{email} {
-      allow read: if isAuthenticated() && (request.auth.token.email.lower() == email.lower() || isAdmin());
+      allow read: if isAuthenticated() && (
+        (hasEmail() && request.auth.token.email == email) || 
+        isAdmin()
+      );
       
       // Criação: Apenas se for o próprio usuário criando sua conta com papel padrão 'driver' (evita auto-promoção)
       allow create: if isAdmin() || (
         isAuthenticated() && 
-        request.auth.token.email.lower() == email.lower() && 
+        hasEmail() && 
+        request.auth.token.email == email && 
         request.resource.data.role == 'driver' &&
-        request.resource.data.email.lower() == email.lower()
+        request.resource.data.email == email
       );
       
       // Atualização: Usuários comuns podem atualizar seus próprios dados (como pushToken), mas NUNCA alterar seu papel (role)
       allow update: if isAdmin() || (
         isAuthenticated() && 
-        request.auth.token.email.lower() == email.lower() && 
+        hasEmail() && 
+        request.auth.token.email == email && 
         request.resource.data.role == resource.data.role
       );
       
@@ -50,7 +60,8 @@ service cloud.firestore {
       // Motoristas só podem iniciar/concluir se forem o motorista designado e não estiverem reatribuindo a viagem a outro motorista
       allow update: if isAdmin() || (
         isAuthenticated() && 
-        (resource.data.motoristaId == request.auth.token.email.lower() || resource.data.motoristaEmail == request.auth.token.email.lower()) &&
+        hasEmail() &&
+        (resource.data.motoristaId == request.auth.token.email || resource.data.motoristaEmail == request.auth.token.email) &&
         (request.resource.data.motoristaId == resource.data.motoristaId || request.resource.data.motoristaEmail == resource.data.motoristaEmail)
       );
     }
@@ -60,8 +71,10 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       
       // Criação: Qualquer motorista autenticado pode salvar o fechamento correspondente ao seu próprio ID
-      allow create: if isAuthenticated() && 
-        (request.resource.data.driverId == request.auth.token.email.lower() || isAdmin());
+      allow create: if isAuthenticated() && (
+        (hasEmail() && request.resource.data.driverId == request.auth.token.email) || 
+        isAdmin()
+      );
         
       allow update, delete: if isAdmin();
     }
@@ -97,7 +110,8 @@ service cloud.firestore {
       
       // Criação: Qualquer motorista autenticado pode criar, contanto que o e-mail no relatório coincida com seu login
       allow create: if isAuthenticated() && 
-        request.resource.data.motoristaEmail.lower() == request.auth.token.email.lower();
+        hasEmail() &&
+        request.resource.data.motoristaEmail == request.auth.token.email;
         
       // Atualização/Exclusão: Apenas administradores podem atualizar o status da avaria ou apagá-la
       allow update, delete: if isAdmin();
@@ -105,11 +119,15 @@ service cloud.firestore {
 
     // Coleção: reembolsos (Pedidos de reembolso enviados à central e IA)
     match /reembolsos/{reimbId} {
-      allow read: if isAuthenticated() && (resource.data.motoristaId == request.auth.token.email.lower() || isAdmin());
+      allow read: if isAuthenticated() && (
+        (hasEmail() && resource.data.motoristaId == request.auth.token.email) || 
+        isAdmin()
+      );
       
       // Criação: O motorista só pode criar reembolsos para si mesmo, com valor positivo e com status inicial 'pendente'
       allow create: if isAuthenticated() && 
-        request.resource.data.motoristaId == request.auth.token.email.lower() &&
+        hasEmail() &&
+        request.resource.data.motoristaId == request.auth.token.email &&
         request.resource.data.valor > 0 &&
         request.resource.data.status == 'pendente';
         
