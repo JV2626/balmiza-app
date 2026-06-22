@@ -1,73 +1,110 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper para verificar se o usuário é admin
-    function isAdmin() {
-      return request.auth != null && 
-        exists(/databases/$(database)/documents/usuarios/$(request.auth.token.email)) &&
-        get(/databases/$(database)/documents/usuarios/$(request.auth.token.email)).data.role == 'admin';
+
+    // Regra padrão de negação: bloqueia qualquer acesso que não seja explicitamente liberado abaixo
+    match /{document=**} {
+      allow read, write: if false;
     }
 
     // Helper para verificar se o usuário está autenticado
     function isAuthenticated() {
-      return request.auth != null;
+      return request.auth != null && request.auth.token != null;
     }
 
-    // Regras para a coleção usuarios
+    // Helper para verificar se o usuário possui cargo de administrador no Firestore
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.token.email)) &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.token.email)).data.role == 'admin';
+    }
+
+    // Helper para validar campos de entrada de forma geral
+    function isValidRole(role) {
+      return role == 'admin' || role == 'driver' || role == 'motorista';
+    }
+
+    // Coleção: usuarios
     match /usuarios/{email} {
       allow read: if isAuthenticated() && (request.auth.token.email.toLowerCase() == email.toLowerCase() || isAdmin());
-      // Usuários comuns só podem se cadastrar/atualizar se mantiverem/definirem a role como 'driver'
-      allow create: if isAdmin() || (isAuthenticated() && request.auth.token.email.toLowerCase() == email.toLowerCase() && request.resource.data.role == 'driver');
-      allow update: if isAdmin() || (isAuthenticated() && request.auth.token.email.toLowerCase() == email.toLowerCase() && request.resource.data.role == resource.data.role);
+      
+      // Criação: Apenas se for o próprio usuário criando sua conta com papel padrão 'driver' (evita auto-promoção)
+      allow create: if isAdmin() || (
+        isAuthenticated() && 
+        request.auth.token.email.toLowerCase() == email.toLowerCase() && 
+        request.resource.data.role == 'driver' &&
+        request.resource.data.email.toLowerCase() == email.toLowerCase()
+      );
+      
+      // Atualização: Usuários comuns podem atualizar seus próprios dados (como pushToken), mas NUNCA alterar seu papel (role)
+      allow update: if isAdmin() || (
+        isAuthenticated() && 
+        request.auth.token.email.toLowerCase() == email.toLowerCase() && 
+        request.resource.data.role == resource.data.role
+      );
+      
       allow delete: if isAdmin();
     }
 
-    // Regras para a coleção viagens
+    // Coleção: viagens
     match /viagens/{tripId} {
       allow read: if isAuthenticated();
       allow create, delete: if isAdmin();
-      // Admins podem atualizar tudo. Motoristas só podem atualizar se forem os motoristas atribuídos à viagem.
+      
+      // Atualização: Admins podem atualizar tudo.
+      // Motoristas só podem atualizar se forem o motorista designado E se não estiverem reatribuindo a viagem a outrem
       allow update: if isAdmin() || (
         isAuthenticated() && 
-        (resource.data.motoristaId == request.auth.token.email.toLowerCase() || resource.data.motoristaEmail == request.auth.token.email.toLowerCase())
+        (resource.data.motoristaId == request.auth.token.email.toLowerCase() || resource.data.motoristaEmail == request.auth.token.email.toLowerCase()) &&
+        (request.resource.data.motoristaId == resource.data.motoristaId || request.resource.data.motoristaEmail == resource.data.motoristaEmail)
       );
     }
 
-    // Regras para veiculos
+    // Coleção: veiculos
     match /veiculos/{vehicleId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
-    // Regras para funcionarios
+    // Coleção: funcionarios
     match /funcionarios/{empId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
-    // Regras para locais_favoritos
+    // Coleção: locais_favoritos
     match /locais_favoritos/{locId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
-    // Regras para avarias
+    // Coleção: avarias
     match /avarias/{reportId} {
       allow read: if isAuthenticated();
-      // Qualquer motorista autenticado pode criar um relatório de avaria. Apenas admins deletam ou atualizam o status.
-      allow create: if isAuthenticated();
+      
+      // Criação: Qualquer motorista autenticado pode criar, contanto que o e-mail no relatório coincida com seu login
+      allow create: if isAuthenticated() && 
+        request.resource.data.motoristaEmail.toLowerCase() == request.auth.token.email.toLowerCase();
+        
+      // Atualização/Exclusão: Apenas administradores podem atualizar o status da avaria ou apagá-la
       allow update, delete: if isAdmin();
     }
 
-    // Regras para reembolsos
+    // Coleção: reembolsos
     match /reembolsos/{reimbId} {
       allow read: if isAuthenticated() && (resource.data.motoristaId == request.auth.token.email.toLowerCase() || isAdmin());
-      // Motoristas só podem criar seus próprios reembolsos. Apenas admins deletam/editam o status.
-      allow create: if isAuthenticated() && request.resource.data.motoristaId == request.auth.token.email.toLowerCase();
+      
+      // Criação: O motorista só pode criar reembolsos para si mesmo, com valor positivo e com status inicial 'pendente'
+      allow create: if isAuthenticated() && 
+        request.resource.data.motoristaId == request.auth.token.email.toLowerCase() &&
+        request.resource.data.valor > 0 &&
+        request.resource.data.status == 'pendente';
+        
+      // Atualização/Exclusão: Apenas administradores podem alterar o status (aprovar/recusar) ou deletar
       allow update, delete: if isAdmin();
     }
 
-    // Regras para shifts
+    // Coleção: shifts
     match /shifts/{shiftId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();

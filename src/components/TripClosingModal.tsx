@@ -3,7 +3,7 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet, TextInput, ActivityInd
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { doc, updateDoc, getDocs, query, collection, where, addDoc } from 'firebase/firestore';
 import * as ImagePicker from 'expo-image-picker';
-import { getFirebaseDb } from '../config/firebase';
+import { getFirebaseDb, getFirebaseAuth } from '../config/firebase';
 
 const colors = {
   white: '#FFFFFF',
@@ -46,23 +46,37 @@ export const TripClosingModal = ({ visible, onClose, tripData }: Props) => {
   const uploadToImgBB = async (base64Image: string) => {
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('image', base64Image);
-      const imgbbKey = process.env.EXPO_PUBLIC_IMGBB_API_KEY;
-      if (!imgbbKey) {
-        Alert.alert('Aviso', 'A chave da API do ImgBB não foi configurada. A foto não será salva na nuvem.');
-        return;
+      let idToken = '';
+      try {
+        const auth = getFirebaseAuth();
+        if (auth.currentUser) {
+          idToken = await auth.currentUser.getIdToken();
+        }
+      } catch (err) {
+        console.log('Erro ao buscar token do Firebase para upload:', err);
       }
-      
-      const res = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbKey}`, {
+
+      const apiUrl = Platform.OS === 'web' 
+        ? '/api/upload' 
+        : (process.env.EXPO_PUBLIC_API_URL || 'https://balmiza-app.vercel.app') + '/api/upload';
+
+      const res = await fetch(apiUrl, {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': idToken ? `Bearer ${idToken}` : ''
+        },
+        body: JSON.stringify({ base64Image }),
       });
+
       const data = await res.json();
-      if (data.success) {
-        setFotoUrl(data.data.url);
+      if (res.ok && data.success) {
+        setFotoUrl(data.url);
+      } else {
+        throw new Error(data.error || 'Erro no envio da imagem.');
       }
     } catch (e) {
+      console.log('Erro no upload para ImgBB:', e);
       Alert.alert('Erro', 'Falha ao enviar a foto do painel.');
     } finally {
       setLoading(false);
