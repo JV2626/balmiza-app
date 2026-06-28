@@ -364,7 +364,7 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                           <View style={{ flex: 1, paddingRight: 8 }}>
                             <Text style={styles.miniPName}>👤 {p.nome}</Text>
                             <Text style={styles.miniPAddress}>📍 {p.endereco}</Text>
-                            {p.setor ? (
+                            {p.setor && p.setor !== 'PEGAR AMOSTRAS' ? (
                               <View style={styles.miniActionBadge}>
                                 <Text style={styles.miniActionText}>{p.setor}</Text>
                               </View>
