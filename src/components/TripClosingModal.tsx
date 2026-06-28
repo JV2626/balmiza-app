@@ -89,11 +89,6 @@ export const TripClosingModal = ({ visible, onClose, tripData }: Props) => {
       return;
     }
 
-    if (!fotoUrl) {
-      Alert.alert('Atenção', 'É OBRIGATÓRIO enviar a foto do painel (Hodômetro) para comprovar o KM final.');
-      return;
-    }
-
     if (Number(kmFinal) <= Number(kmInicial)) {
       Alert.alert('Erro', 'O KM Final deve ser maior que o KM Inicial.');
       return;
@@ -181,7 +176,7 @@ export const TripClosingModal = ({ visible, onClose, tripData }: Props) => {
               placeholder="Ex: 15400"
             />
 
-            <Text style={styles.label}>FOTO DO PAINEL (Obrigatório)</Text>
+            <Text style={styles.label}>FOTO DO PAINEL (Opcional)</Text>
             <TouchableOpacity style={styles.photoBtn} onPress={takePhoto}>
               <MaterialCommunityIcons name="camera" size={32} color={colors.graphite} />
               <Text style={styles.photoBtnText}>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Linking, Platform, Animated, Clipboard } from 'react-native';
-import { collection, query, where, onSnapshot, doc, setDoc, getDocs } from 'firebase/firestore';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Linking, Platform, Animated, Clipboard, Modal, TextInput } from 'react-native';
+import { collection, query, where, onSnapshot, doc, setDoc, getDocs, addDoc, updateDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getFirebaseDb, getFirebaseAuth } from '../config/firebase';
@@ -36,6 +36,17 @@ export const DriverHomeScreen = ({ navigation }: any) => {
   
   const [showReembolso, setShowReembolso] = useState(false);
   const [showAIChat, setShowAIChat] = useState(false);
+
+  // Planilha digital e viagem extra
+  const [completedTripsToday, setCompletedTripsToday] = useState<any[]>([]);
+  const [showExtraModal, setShowExtraModal] = useState(false);
+  const [extraPassageiros, setExtraPassageiros] = useState('');
+  const [extraDestino, setExtraDestino] = useState('CASA/JBS');
+  const [extraHoraSaida, setExtraHoraSaida] = useState('');
+  const [extraHoraChegada, setExtraHoraChegada] = useState('');
+  const [extraKmInicial, setExtraKmInicial] = useState('');
+  const [extraKmFinal, setExtraKmFinal] = useState('');
+  const [extraSaving, setExtraSaving] = useState(false);
 
   useEffect(() => {
     loadUser();
@@ -84,9 +95,26 @@ export const DriverHomeScreen = ({ navigation }: any) => {
       setLoading(false);
     });
 
+    const today = new Date();
+    const formattedToday = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+
+    const qCompleted = query(
+      collection(db, 'viagens'),
+      where('motoristaId', '==', email.toLowerCase()),
+      where('data', '==', formattedToday),
+      where('status', '==', 'completed')
+    );
+    
+    const unsubCompleted = onSnapshot(qCompleted, (snapshot) => {
+      const trips = snapshot.docs.map(d => ({ id: d.id, ...d.data() as any }));
+      trips.sort((a, b) => (a.horaInicio || '').localeCompare(b.horaInicio || ''));
+      setCompletedTripsToday(trips);
+    });
+
     return () => {
       unsubDriver();
       unsubscribe();
+      unsubCompleted();
     };
   };
 
@@ -102,6 +130,89 @@ export const DriverHomeScreen = ({ navigation }: any) => {
       Alert.alert('Sucesso', `Seu veículo atual foi definido como ${vehicleLabel}.`);
     } catch (e) {
       Alert.alert('Erro', 'Não foi possível atualizar o veículo.');
+    }
+  };
+
+  const handleSaveExtraTrip = async () => {
+    if (!extraPassageiros || !extraHoraSaida || !extraHoraChegada || !extraKmInicial || !extraKmFinal) {
+      Alert.alert('Erro', 'Por favor, preencha todos os campos obrigatórios.');
+      return;
+    }
+    if (Number(extraKmFinal) <= Number(extraKmInicial)) {
+      Alert.alert('Erro', 'O KM Final deve ser maior que o KM Inicial.');
+      return;
+    }
+    
+    setExtraSaving(true);
+    try {
+      const db = getFirebaseDb();
+      const today = new Date();
+      const formattedToday = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+      
+      const plate = allocatedVehicle || (pendingShifts.length > 0 ? pendingShifts[0].carroPlaca : 'SEM CARRO');
+      
+      // 1. Salvar na coleção 'viagens' (para o motorista ver na planilha digital)
+      await addDoc(collection(db, 'viagens'), {
+        motoristaId: driverEmail.toLowerCase().trim(),
+        motoristaNome: driverEmail.split('@')[0].toUpperCase(),
+        data: formattedToday,
+        destino: extraDestino,
+        carroPlaca: plate,
+        kmInicial: Number(extraKmInicial),
+        kmFinal: Number(extraKmFinal),
+        totalKm: Number(extraKmFinal) - Number(extraKmInicial),
+        horaInicio: extraHoraSaida.trim(),
+        horaFim: extraHoraChegada.trim(),
+        status: 'completed',
+        isExtra: true,
+        checklistRealizado: true,
+        passageiros: [{
+          nome: extraPassageiros.trim(),
+          endereco: 'Itapetininga, SP',
+          setor: 'EXTRA',
+          status: 'concluido'
+        }],
+        createdAt: new Date(),
+        closedAt: new Date()
+      });
+
+      // 2. Salvar na coleção 'trips' (para o painel administrativo)
+      await addDoc(collection(db, 'trips'), {
+        driverId: driverEmail.toLowerCase().trim(),
+        status: 'completed',
+        closedAt: new Date(),
+        finalOdometer: Number(extraKmFinal),
+        notes: 'VIAGEM EXTRA REGISTRADA PELO MOTORISTA',
+        dashboardImageUrl: '',
+        closingLocation: extraDestino,
+        isExtra: true
+      });
+
+      // 3. Atualizar quilometragem do veículo no banco de dados
+      if (plate && plate !== 'SEM CARRO') {
+        const q = query(collection(db, 'veiculos'), where('placa', '==', plate));
+        const veicSnap = await getDocs(q);
+        if (!veicSnap.empty) {
+          await updateDoc(doc(db, 'veiculos', veicSnap.docs[0].id), {
+            kmAtual: Number(extraKmFinal)
+          });
+        }
+      }
+
+      Alert.alert('Sucesso', 'Viagem extra registrada com sucesso!');
+      setShowExtraModal(false);
+      
+      // Limpar campos
+      setExtraPassageiros('');
+      setExtraHoraSaida('');
+      setExtraHoraChegada('');
+      setExtraKmInicial('');
+      setExtraKmFinal('');
+    } catch (e) {
+      console.log('Error saving extra trip:', e);
+      Alert.alert('Erro', 'Não foi possível registrar a viagem extra.');
+    } finally {
+      setExtraSaving(false);
     }
   };
 
@@ -299,6 +410,65 @@ export const DriverHomeScreen = ({ navigation }: any) => {
           <Text style={[styles.damageBtnText, { color: colors.green }]}>SOLICITAR REEMBOLSO</Text>
         </TouchableOpacity>
 
+        {/* TABELA DE VIAGENS DE HOJE (PLANILHA DIGITAL) */}
+        <View style={styles.sheetCard}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+            <Text style={styles.sheetTitle}>MINHAS VIAGENS DE HOJE</Text>
+            <TouchableOpacity 
+              style={styles.addExtraBtn} 
+              onPress={() => {
+                const plate = allocatedVehicle || (pendingShifts.length > 0 ? pendingShifts[0].carroPlaca : null);
+                if (plate) {
+                  const found = allActiveVehicles.find(v => v.placa === plate);
+                  if (found) setExtraKmInicial(found.kmAtual?.toString() || '');
+                }
+                setShowExtraModal(true);
+              }}
+            >
+              <MaterialCommunityIcons name="plus" size={14} color={colors.white} />
+              <Text style={styles.addExtraBtnText}>EXTRA</Text>
+            </TouchableOpacity>
+          </View>
+
+          {completedTripsToday.length === 0 ? (
+            <Text style={styles.emptySheetText}>Nenhuma viagem registrada hoje ainda.</Text>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.table}>
+                {/* Header Row */}
+                <View style={styles.tableRowHeader}>
+                  <Text style={[styles.tableCellHeader, { width: 120 }]}>Passageiros</Text>
+                  <Text style={[styles.tableCellHeader, { width: 100 }]}>Destino</Text>
+                  <Text style={[styles.tableCellHeader, { width: 70 }]}>Saída</Text>
+                  <Text style={[styles.tableCellHeader, { width: 70 }]}>Chegada</Text>
+                  <Text style={[styles.tableCellHeader, { width: 80 }]}>KM Inicial</Text>
+                  <Text style={[styles.tableCellHeader, { width: 80 }]}>KM Final</Text>
+                  <Text style={[styles.tableCellHeader, { width: 60 }]}>Tipo</Text>
+                </View>
+
+                {/* Data Rows */}
+                {completedTripsToday.map((t, idx) => {
+                  const passNames = t.passageiros?.map((p: any) => p.nome).join(', ') || 'N/A';
+                  const isExt = t.isExtra === true;
+                  return (
+                    <View key={t.id} style={[styles.tableRow, idx % 2 === 1 && { backgroundColor: '#F9FAFB' }]}>
+                      <Text style={[styles.tableCell, { width: 120 }]} numberOfLines={1}>{passNames}</Text>
+                      <Text style={[styles.tableCell, { width: 100 }]} numberOfLines={1}>{t.destino}</Text>
+                      <Text style={[styles.tableCell, { width: 70 }]}>{t.horaInicio || '-'}</Text>
+                      <Text style={[styles.tableCell, { width: 70 }]}>{t.horaFim || '-'}</Text>
+                      <Text style={[styles.tableCell, { width: 80 }]}>{t.kmInicial || '-'}</Text>
+                      <Text style={[styles.tableCell, { width: 80 }]}>{t.kmFinal || '-'}</Text>
+                      <Text style={[styles.tableCell, { width: 60, fontWeight: 'bold', color: isExt ? '#DF0A0A' : colors.green }]}>
+                        {isExt ? 'EXTRA' : 'NORMAL'}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          )}
+        </View>
+
         {loading ? (
           <ActivityIndicator size="large" color={colors.graphite} style={{marginTop: 50}} />
         ) : getConsolidatedShift() ? (() => {
@@ -452,6 +622,109 @@ export const DriverHomeScreen = ({ navigation }: any) => {
         onClose={() => setShowAIChat(false)}
         driverEmail={driverEmail}
       />
+
+      {/* MODAL REGISTRAR VIAGEM EXTRA */}
+      <Modal visible={showExtraModal} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>REGISTRAR VIAGEM EXTRA</Text>
+              <TouchableOpacity onPress={() => setShowExtraModal(false)}>
+                <MaterialCommunityIcons name="close" size={24} color={colors.graphite} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, marginVertical: 15 }}>
+              <Text style={styles.modalLabel}>Passageiro(s)</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Ex: Angelica"
+                value={extraPassageiros}
+                onChangeText={setExtraPassageiros}
+              />
+
+              <Text style={styles.modalLabel}>Sentido / Destino</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 5 }}>
+                {['CASA/JBS', 'JBS/CASA', 'OUTRO'].map(d => (
+                  <TouchableOpacity
+                    key={d}
+                    style={[
+                      styles.pickerChip,
+                      extraDestino === d && styles.pickerChipActive,
+                      { flex: 1, alignItems: 'center' }
+                    ]}
+                    onPress={() => setExtraDestino(d)}
+                  >
+                    <Text style={[
+                      styles.pickerChipText,
+                      extraDestino === d && { color: colors.white }
+                    ]}>
+                      {d}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 15 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalLabel}>Hora Saída (Casa)</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="Ex: 04:50"
+                    value={extraHoraSaida}
+                    onChangeText={setExtraHoraSaida}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalLabel}>Hora Chegada (JBS)</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="Ex: 05:25"
+                    value={extraHoraChegada}
+                    onChangeText={setExtraHoraChegada}
+                  />
+                </View>
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 15 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalLabel}>KM Inicial</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="Ex: 90620"
+                    value={extraKmInicial}
+                    onChangeText={setExtraKmInicial}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalLabel}>KM Final</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="Ex: 90644"
+                    value={extraKmFinal}
+                    onChangeText={setExtraKmFinal}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowExtraModal(false)} disabled={extraSaving}>
+                <Text style={styles.modalCancelBtnText}>CANCELAR</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={handleSaveExtraTrip} disabled={extraSaving}>
+                {extraSaving ? (
+                  <ActivityIndicator color={colors.white} />
+                ) : (
+                  <Text style={styles.modalSaveBtnText}>REGISTRAR</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Botão Flutuante (FAB) da IA */}
       <TouchableOpacity 
@@ -658,6 +931,164 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 12,
     fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  sheetCard: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 20,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: colors.graphite,
+    textTransform: 'uppercase',
+  },
+  addExtraBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DF0A0A',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    gap: 4,
+  },
+  addExtraBtnText: {
+    color: colors.white,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  emptySheetText: {
+    fontSize: 13,
+    color: colors.graphiteLight,
+    textAlign: 'center',
+    marginVertical: 10,
+    fontStyle: 'italic',
+  },
+  table: {
+    flexDirection: 'column',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  tableRowHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#F3F4F6',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  tableCellHeader: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: colors.graphite,
+    textTransform: 'uppercase',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+  },
+  tableCell: {
+    fontSize: 13,
+    color: colors.graphite,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: colors.graphite,
+    textTransform: 'uppercase',
+  },
+  modalLabel: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: colors.graphiteLight,
+    marginTop: 12,
+    textTransform: 'uppercase',
+  },
+  modalInput: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.graphite,
+    marginTop: 5,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 15,
+    marginTop: 15,
+  },
+  modalCancelBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: colors.white,
+  },
+  modalCancelBtnText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: colors.graphiteLight,
+    textTransform: 'uppercase',
+  },
+  modalSaveBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: colors.green,
+  },
+  modalSaveBtnText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: colors.white,
     textTransform: 'uppercase',
   }
 });
