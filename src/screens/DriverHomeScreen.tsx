@@ -736,8 +736,11 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                     }
                   }
 
+                  const allShiftIds = consolidated.originalShifts.map(s => s.id);
+
                   setClosingTrip({
                     ...originalShift,
+                    allShiftIds, // passa todos os IDs do dia
                     groupKey: undefined, // indica fechamento de turno completo
                     kmInicial: initialKm,
                     kmFinal: finalKm

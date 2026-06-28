@@ -149,23 +149,37 @@ export const TripClosingModal = ({ visible, onClose, tripData }: Props) => {
         });
 
       } else {
-        // Lógica legada
-        await updateDoc(doc(db, 'viagens', tripData.id), {
-          status: 'completed',
-          horaFim,
-          kmInicial: Number(kmInicial),
-          kmFinal: Number(kmFinal),
-          totalKm: Number(kmFinal) - Number(kmInicial),
-          observacoes,
-          fotoUrl
-        });
+        // Lógica de fechamento de turno completo: Concluir todos os roteiros consolidados do dia
+        if (tripData.allShiftIds && Array.isArray(tripData.allShiftIds)) {
+          for (const shiftId of tripData.allShiftIds) {
+            await updateDoc(doc(db, 'viagens', shiftId), {
+              status: 'completed',
+              horaFim,
+              kmInicial: Number(kmInicial),
+              kmFinal: Number(kmFinal),
+              totalKm: Number(kmFinal) - Number(kmInicial),
+              observacoes,
+              fotoUrl
+            });
+          }
+        } else {
+          await updateDoc(doc(db, 'viagens', tripData.id), {
+            status: 'completed',
+            horaFim,
+            kmInicial: Number(kmInicial),
+            kmFinal: Number(kmFinal),
+            totalKm: Number(kmFinal) - Number(kmInicial),
+            observacoes,
+            fotoUrl
+          });
+        }
 
         await addDoc(collection(db, 'trips'), {
           driverId: tripData.motoristaId || tripData.motoristaNome || 'N/A',
           status: 'completed',
           closedAt: new Date(),
           finalOdometer: Number(kmFinal),
-          notes: observacoes || '',
+          notes: `Turno completo finalizado. Obs: ${observacoes || ''}`,
           dashboardImageUrl: fotoUrl || '',
           closingLocation: tripData.destino || 'Itapetininga, SP'
         });

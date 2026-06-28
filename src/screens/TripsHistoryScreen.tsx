@@ -106,7 +106,76 @@ export const TripsHistoryScreen = ({ navigation }: any) => {
     return result;
   };
 
-  const filteredData = getFilteredTrips();
+  const getGroupedTrips = () => {
+    const raw = getFilteredTrips();
+    const groups: { [key: string]: any } = {};
+
+    raw.forEach((t: any) => {
+      // Agrupa por data + e-mail do motorista
+      const motoristaKey = t.motoristaId || t.motoristaNome || 'N/A';
+      const key = `${t.data}_${motoristaKey.toLowerCase()}`;
+
+      if (!groups[key]) {
+        groups[key] = {
+          id: key,
+          data: t.data,
+          motoristaId: t.motoristaId,
+          motoristaNome: t.motoristaNome,
+          carroPlaca: t.carroPlaca,
+          kmInicial: t.kmInicial || 0,
+          kmFinal: t.kmFinal || 0,
+          observacoes: t.observacoes ? [t.observacoes] : [],
+          fotoUrl: t.fotoUrl || '',
+          passageiros: t.passageiros ? [...t.passageiros] : [],
+          horaInicio: t.horaInicio || '',
+          horaFim: t.horaFim || '',
+          cleanNotes: []
+        };
+      } else {
+        const group = groups[key];
+        
+        // Mantém o menor KM Inicial do dia
+        if (t.kmInicial && (t.kmInicial < group.kmInicial || group.kmInicial === 0)) {
+          group.kmInicial = t.kmInicial;
+        }
+        
+        // Mantém o maior KM Final do dia
+        if (t.kmFinal && t.kmFinal > group.kmFinal) {
+          group.kmFinal = t.kmFinal;
+        }
+
+        // Acumula passageiros únicos
+        if (t.passageiros) {
+          t.passageiros.forEach((p: any) => {
+            const exists = group.passageiros.some((ep: any) => ep.nome === p.nome && ep.horarioEntrada === p.horarioEntrada);
+            if (!exists) group.passageiros.push(p);
+          });
+        }
+
+        // Acumula observações
+        if (t.observacoes) {
+          group.observacoes.push(t.observacoes);
+        }
+
+        // Mantém a foto se houver
+        if (t.fotoUrl && !group.fotoUrl) {
+          group.fotoUrl = t.fotoUrl;
+        }
+
+        // Atualiza horas de início/fim mais distantes do dia
+        if (t.horaInicio && (!group.horaInicio || t.horaInicio < group.horaInicio)) {
+          group.horaInicio = t.horaInicio;
+        }
+        if (t.horaFim && (!group.horaFim || t.horaFim > group.horaFim)) {
+          group.horaFim = t.horaFim;
+        }
+      }
+    });
+
+    return Object.values(groups);
+  };
+
+  const consolidatedData = getGroupedTrips();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -166,14 +235,14 @@ export const TripsHistoryScreen = ({ navigation }: any) => {
       {/* List */}
       {loading ? (
         <ActivityIndicator size="large" color={colors.red} style={{ marginTop: 50 }} />
-      ) : filteredData.length === 0 ? (
+      ) : consolidatedData.length === 0 ? (
         <View style={styles.emptyCard}>
           <MaterialCommunityIcons name="folder-open-outline" size={48} color={colors.graphiteLight} />
           <Text style={styles.emptyText}>Nenhuma viagem concluída corresponde aos filtros.</Text>
         </View>
       ) : (
         <FlatList
-          data={filteredData}
+          data={consolidatedData}
           keyExtractor={item => item.id}
           contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
           renderItem={({ item }) => {
@@ -195,17 +264,22 @@ export const TripsHistoryScreen = ({ navigation }: any) => {
                   <Text style={styles.infoLabel}>Veículo: <Text style={styles.infoValue}>{item.carroPlaca}</Text></Text>
                   <Text style={styles.infoLabel}>KM Inicial: <Text style={styles.infoValue}>{item.kmInicial}</Text> | KM Final: <Text style={styles.infoValue}>{item.kmFinal}</Text></Text>
                   
-                  {item.horaInicio && item.horaFim ? (
-                    <Text style={styles.infoLabel}>Duração: <Text style={styles.infoValue}>{item.horaInicio} às {item.horaFim}</Text></Text>
+                  {item.horaInicio || item.horaFim ? (
+                    <Text style={styles.infoLabel}>Período de Rota: <Text style={styles.infoValue}>{item.horaInicio || '-'} às {item.horaFim || '-'}</Text></Text>
                   ) : null}
 
-                  {item.observacoes ? (
-                    <Text style={[styles.infoLabel, { marginTop: 5 }]}>Notas: <Text style={styles.notesText}>"{item.observacoes}"</Text></Text>
+                  {item.observacoes && item.observacoes.length > 0 ? (
+                    <View style={{ marginTop: 5 }}>
+                      <Text style={styles.infoLabel}>Notas:</Text>
+                      {item.observacoes.map((obs: string, obsIdx: number) => (
+                        <Text key={obsIdx} style={styles.notesText}>• "{obs}"</Text>
+                      ))}
+                    </View>
                   ) : null}
 
                   {/* Passengers */}
                   <View style={styles.passengersSection}>
-                    <Text style={styles.passengersTitle}>Passageiros ({item.passageiros?.length || 0})</Text>
+                    <Text style={styles.passengersTitle}>Passageiros Únicos no Dia ({item.passageiros?.length || 0})</Text>
                     {item.passageiros?.map((p: any, pIdx: number) => (
                       <Text key={pIdx} style={styles.passengerLine}>
                         • {p.nome} <Text style={{ color: colors.graphiteLight }}>({p.horarioEntrada} - {p.setor || 'JBS'})</Text>
