@@ -98,8 +98,9 @@ export const FleetManagementScreen = ({ navigation }: any) => {
       setModelo(''); 
       setKmAtual('');
       fetchVehicles();
-    } catch (e) {
-      showCustomAlert('Erro', 'Não foi possível salvar o veículo.', 'error');
+    } catch (e: any) {
+      console.log('Error saving vehicle:', e);
+      showCustomAlert('Erro', `Não foi possível salvar o veículo: ${e.message || e}`, 'error');
     } finally {
       setLoading(false);
     }
