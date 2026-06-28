@@ -700,16 +700,9 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                 style={styles.finishTurnBtn} 
                 onPress={() => {
                   const originalShift = consolidated.originalShifts[0];
-                  const plate = allocatedVehicle || originalShift.carroPlaca;
                   
-                  // Buscar o kmAtual do carro para fallback
-                  let resolvedKm = '0';
-                  if (plate) {
-                    const found = allActiveVehicles.find(v => v.placa === plate);
-                    if (found) resolvedKm = found.kmAtual?.toString() || '0';
-                  }
-
-                  let initialKm = resolvedKm;
+                  // O KM inicial do turno deve ser o KM inicial original despachado pelo admin (ex: 90808)
+                  let initialKm = originalShift.kmInicial?.toString() || '0';
                   let finalKm = '';
 
                   if (consolidated.groupStates) {
@@ -717,13 +710,7 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                     const completedStates = states.filter(s => s.status === 'completed');
                     
                     if (completedStates.length > 0) {
-                      // O KM inicial do turno é o menor KM inicial entre as viagens concluídas
-                      const startKms = completedStates.map(s => Number(s.kmInicial)).filter(k => !isNaN(k) && k > 0);
-                      if (startKms.length > 0) {
-                        initialKm = Math.min(...startKms).toString();
-                      }
-                      
-                      // O KM final do turno é o maior KM final entre as viagens concluídas
+                      // O KM final do turno é o maior KM final registrado na última viagem concluída
                       const endKms = completedStates.map(s => Number(s.kmFinal)).filter(k => !isNaN(k) && k > 0);
                       if (endKms.length > 0) {
                         finalKm = Math.max(...endKms).toString();
