@@ -398,6 +398,11 @@ export const AdminDispatchScreen = () => {
         - Lista de Passageiros/Funcionários Cadastrados: ${JSON.stringify(employeesList.map(e => e.nome))}
         - Lista de Locais Favoritos (CDA, JBS, etc.): ${JSON.stringify(favoritesList.map(f => f.nome))}
 
+        REGRAS CRÍTICAS DE EXTRAÇÃO:
+        1. **Divisão de Múltiplas Viagens**: Se um mesmo motorista possui múltiplos horários de viagem ou diferentes destinos no texto (ex: Regis tem viagens às 05:00, 05:40, 17:00, etc.), você DEVE criar **um item separado** no array "scales" para cada uma dessas viagens dele! NUNCA junte viagens de horários ou destinos diferentes de um mesmo motorista em uma única escala. Se ele fizer 6 viagens, devem existir 6 itens no array "scales".
+        2. **Destino Exato**: O campo "destino" deve ser preenchido exatamente como "CASA/JBS" (se for sentido Casa para o trabalho/JBS) ou "JBS/CASA" (se for sentido Trabalho/JBS de volta para Casa). Use exatamente uma destas duas strings no formato maiúsculo.
+        3. **Horários nas Paradas**: Para cada parada ("paradas"), o "horarioEntrada" deve ser o horário exato daquela viagem específica (ex: "05:00" para a viagem das 05:00h, "17:50" para a viagem das 17:50h). O "horarioSaida" deve ser 10 minutos após o entrada (ex: "05:10" ou "18:00"). Nunca retorne horários genéricos como "08:00".
+
         Se o texto contiver escalas de múltiplos motoristas (como Regis, Thiago, Bruno, Moisés, etc.), retorne no formato:
         {
           "isMulti": true,
@@ -407,7 +412,7 @@ export const AdminDispatchScreen = () => {
               "motoristaEmail": "Email correspondente encontrado na lista de motoristas, ou string vazia",
               "carroPlaca": "Placa do veículo correspondente encontrado na lista de veículos, ou string vazia",
               "data": "DD/MM/AAAA",
-              "destino": "Sentido da viagem (ex: 'CASA/JBS' ou 'JBS/CASA')",
+              "destino": "CASA/JBS ou JBS/CASA",
               "paradas": [
                 {
                   "nome": "Nome exato da pessoa ou local citado no texto",
@@ -424,7 +429,7 @@ export const AdminDispatchScreen = () => {
         {
           "isMulti": false,
           "data": "DD/MM/AAAA",
-          "destino": "Sentido da viagem",
+          "destino": "CASA/JBS ou JBS/CASA",
           "motoristaEmail": "Email correspondente",
           "carroPlaca": "Placa correspondente",
           "paradas": [
@@ -448,7 +453,7 @@ export const AdminDispatchScreen = () => {
           carroPlaca: { type: 'string', description: 'Placa do veículo' },
           scales: {
             type: 'array',
-            description: 'Lista de escalas se for múltiplos motoristas (isMulti = true)',
+            description: 'Lista de escalas separadas por viagem',
             items: {
               type: 'object',
               properties: {
@@ -456,7 +461,7 @@ export const AdminDispatchScreen = () => {
                 motoristaEmail: { type: 'string' },
                 carroPlaca: { type: 'string' },
                 data: { type: 'string' },
-                destino: { type: 'string' },
+                destino: { type: 'string', description: 'CASA/JBS ou JBS/CASA' },
                 paradas: {
                   type: 'array',
                   items: {
@@ -464,8 +469,8 @@ export const AdminDispatchScreen = () => {
                     properties: {
                       nome: { type: 'string' },
                       setor: { type: 'string' },
-                      horarioEntrada: { type: 'string' },
-                      horarioSaida: { type: 'string' }
+                      horarioEntrada: { type: 'string', description: 'Horário de entrada da viagem (ex: 05:00)' },
+                      horarioSaida: { type: 'string', description: 'Horário de saída da viagem (ex: 05:10)' }
                     },
                     required: ['nome']
                   }
@@ -482,8 +487,8 @@ export const AdminDispatchScreen = () => {
               properties: {
                 nome: { type: 'string' },
                 setor: { type: 'string' },
-                horarioEntrada: { type: 'string' },
-                horarioSaida: { type: 'string' }
+                horarioEntrada: { type: 'string', description: 'Horário de entrada da viagem (ex: 05:00)' },
+                horarioSaida: { type: 'string', description: 'Horário de saída da viagem (ex: 05:10)' }
               },
               required: ['nome']
             }
@@ -791,7 +796,11 @@ export const AdminDispatchScreen = () => {
       
       let startPoint = { latitude: -23.3568, longitude: -47.8574 }; // Default para JBS Tatuí
       
-      const isJbsToCasa = destino.toUpperCase().includes('JBS X CASA') || destino.toUpperCase().includes('JBSXCASA');
+      const isJbsToCasa = destino.toUpperCase().includes('JBS X CASA') || 
+                          destino.toUpperCase().includes('JBSXCASA') ||
+                          destino.toUpperCase().includes('JBS/CASA') ||
+                          destino.toUpperCase().includes('JBS-CASA') ||
+                          destino.toUpperCase().includes('JBS > CASA');
       
       if (!isJbsToCasa) {
         // Se for Casa X JBS, o ponto de partida é a casa do motorista
