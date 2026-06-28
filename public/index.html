@@ -41,14 +41,25 @@
     <!-- The root element for your Expo app. -->
     <div id="root"></div>
 
-    <!-- Registro do Service Worker do PWA -->
+    <!-- Remover o Service Worker antigo e limpar caches para evitar travamento de tela branca -->
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('PWA Service Worker registrado com sucesso:', reg.scope))
-            .catch(err => console.log('Erro ao registrar PWA Service Worker:', err));
-        });
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          for (let registration of registrations) {
+            registration.unregister().then(() => {
+              console.log('Service Worker antigo removido com sucesso.');
+            });
+          }
+        }).catch(err => console.log('Erro ao desregistrar SW:', err));
+      }
+      if ('caches' in window) {
+        caches.keys().then(names => {
+          for (let name of names) {
+            caches.delete(name).then(() => {
+              console.log('Cache limpo:', name);
+            });
+          }
+        }).catch(err => console.log('Erro ao limpar caches:', err));
       }
     </script>
   </body>
