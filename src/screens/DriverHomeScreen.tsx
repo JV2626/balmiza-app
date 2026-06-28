@@ -106,9 +106,65 @@ export const DriverHomeScreen = ({ navigation }: any) => {
   };
 
   const getSelectedVehicleModel = () => {
-    if (!allocatedVehicle) return 'NENHUM ALOCADO';
-    const found = allActiveVehicles.find(v => v.placa === allocatedVehicle);
-    return found ? `${found.modelo} - ${found.placa}` : allocatedVehicle;
+    let plate = allocatedVehicle;
+    if (!plate && pendingShifts.length > 0) {
+      plate = pendingShifts[0].carroPlaca;
+    }
+    if (!plate) return 'NENHUM ALOCADO';
+    const found = allActiveVehicles.find(v => v.placa === plate);
+    return found ? `${found.modelo} - ${plate}` : plate;
+  };
+
+  const getConsolidatedShift = () => {
+    if (pendingShifts.length === 0) return null;
+    
+    const primaryShift = pendingShifts[0];
+    const uniquePlates = pendingShifts.map(s => s.carroPlaca).filter((v, i, a) => a.indexOf(v) === i);
+    const carroPlaca = uniquePlates.length > 0 ? uniquePlates.join(' / ') : 'SEM CARRO';
+    const data = primaryShift.data;
+    
+    const allPassengers: any[] = [];
+    pendingShifts.forEach(shift => {
+      const isVolta = shift.destino?.toUpperCase().includes('JBS/CASA') || 
+                      shift.destino?.toUpperCase().includes('JBSXCASA') ||
+                      shift.destino?.toUpperCase().includes('JBS X CASA') ||
+                      shift.destino?.toUpperCase().includes('JBS-CASA') ||
+                      shift.destino?.toUpperCase().includes('JBS > CASA');
+      const tag = isVolta ? 'Volta' : 'Ida';
+      const label = isVolta ? 'JBS ➔ CASA' : 'CASA ➔ JBS';
+      
+      if (shift.passageiros) {
+        shift.passageiros.forEach((p: any) => {
+          allPassengers.push({
+            ...p,
+            destinoTag: tag,
+            destinoLabel: label,
+            shiftId: shift.id,
+            shiftStatus: shift.status
+          });
+        });
+      }
+    });
+
+    // Ordenar cronologicamente
+    allPassengers.sort((a, b) => (a.horarioEntrada || '').localeCompare(b.horarioEntrada || ''));
+
+    // Agrupar por horarioEntrada + destinoLabel
+    const groupedPassengers: { [key: string]: any[] } = {};
+    allPassengers.forEach(p => {
+      const groupKey = `${p.horarioEntrada}_${p.destinoLabel}`;
+      if (!groupedPassengers[groupKey]) {
+        groupedPassengers[groupKey] = [];
+      }
+      groupedPassengers[groupKey].push(p);
+    });
+
+    return {
+      carroPlaca,
+      data,
+      groupedPassengers,
+      originalShifts: pendingShifts
+    };
   };
 
   const handleStartTrip = async () => {
@@ -207,23 +263,27 @@ export const DriverHomeScreen = ({ navigation }: any) => {
             <View style={styles.pickerWrapper}>
               <Text style={styles.pickerHeadline}>Selecione o veículo que você está usando:</Text>
               <View style={styles.pickerGrid}>
-                {allActiveVehicles.map((v) => (
-                  <TouchableOpacity
-                    key={v.id}
-                    style={[
-                      styles.pickerChip,
-                      allocatedVehicle === v.placa && styles.pickerChipActive
-                    ]}
-                    onPress={() => handleSelectVehicle(v.placa)}
-                  >
-                    <Text style={[
-                      styles.pickerChipText,
-                      allocatedVehicle === v.placa && { color: colors.white }
-                    ]}>
-                      {v.modelo} - {v.placa}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {allActiveVehicles.map((v) => {
+                  const currentPlate = allocatedVehicle || (pendingShifts.length > 0 ? pendingShifts[0].carroPlaca : null);
+                  const isActive = currentPlate === v.placa;
+                  return (
+                    <TouchableOpacity
+                      key={v.id}
+                      style={[
+                        styles.pickerChip,
+                        isActive && styles.pickerChipActive
+                      ]}
+                      onPress={() => handleSelectVehicle(v.placa)}
+                    >
+                      <Text style={[
+                        styles.pickerChipText,
+                        isActive && { color: colors.white }
+                      ]}>
+                        {v.modelo} - {v.placa}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
           )}
@@ -241,81 +301,120 @@ export const DriverHomeScreen = ({ navigation }: any) => {
 
         {loading ? (
           <ActivityIndicator size="large" color={colors.graphite} style={{marginTop: 50}} />
-        ) : pendingShifts.length > 0 ? (
-          pendingShifts.map((shift) => (
-            <AnimatedCard key={shift.id} style={styles.shiftCard}>
+        ) : getConsolidatedShift() ? (() => {
+          const consolidated = getConsolidatedShift()!;
+          return (
+            <AnimatedCard style={styles.shiftCard}>
               <Text style={styles.shiftTitle}>ROTEIRO DE HOJE</Text>
               
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>CARRO:</Text>
-                <Text style={styles.infoValue}>{shift.carroPlaca}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>SENTIDO:</Text>
-                <Text style={styles.infoValue}>{shift.destino || 'Casa X JBS'}</Text>
+                <Text style={styles.infoValue}>{consolidated.carroPlaca}</Text>
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>DATA:</Text>
-                <Text style={styles.infoValue}>{shift.data}</Text>
+                <Text style={styles.infoValue}>{consolidated.data}</Text>
               </View>
 
               <View style={styles.divider} />
-              <Text style={styles.passengersTitle}>PASSAGEIROS</Text>
+              <Text style={styles.passengersTitle}>CRONOGRAMA DE HOJE</Text>
               
-              {shift.passageiros && shift.passageiros.length > 0 && (
+              {Object.keys(consolidated.groupedPassengers).length > 0 && (
                 <TouchableOpacity 
                   style={styles.multiRouteBtn} 
-                  onPress={() => openMultiStopRoute(shift)}
+                  onPress={() => {
+                    const flatSorted: any[] = [];
+                    Object.keys(consolidated.groupedPassengers).forEach(k => {
+                      flatSorted.push(...consolidated.groupedPassengers[k]);
+                    });
+                    openMultiStopRoute({ passageiros: flatSorted, destino: 'JBS Tatuí' });
+                  }}
                 >
                   <MaterialCommunityIcons name="map-marker-multiple" size={20} color={colors.white} />
                   <Text style={styles.multiRouteBtnText}>Iniciar Rota Completa (Multi-Paradas) 🗺️</Text>
                 </TouchableOpacity>
               )}
-              
-              {shift.passageiros?.map((p: any, idx: number) => (
-                <View key={idx} style={styles.passengerBox}>
-                  <View style={{ flex: 1, paddingRight: 10 }}>
-                    <Text style={styles.pName}>{idx + 1}. {p.nome}</Text>
-                    <Text style={styles.pAddress}>{p.endereco}</Text>
-                    {p.setor ? (
-                      <View style={styles.actionBadge}>
-                        <MaterialCommunityIcons name="clipboard-text-play" size={14} color="#B45309" />
-                        <Text style={styles.actionText}>{p.setor}</Text>
+
+              {Object.keys(consolidated.groupedPassengers).map((groupKey) => {
+                const group = consolidated.groupedPassengers[groupKey];
+                const firstP = group[0];
+                const time = firstP.horarioEntrada;
+                const direction = firstP.destinoLabel;
+                const tag = firstP.destinoTag;
+                const isVolta = tag === 'Volta';
+                
+                return (
+                  <View key={groupKey} style={styles.passengerGroupCard}>
+                    <View style={[styles.passengerGroupHeader, { backgroundColor: isVolta ? '#F3F4F6' : '#FEE2E2' }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <MaterialCommunityIcons name="clock-outline" size={16} color={colors.graphite} />
+                        <Text style={{ fontWeight: 'bold', color: colors.graphite, fontSize: 14 }}>{time}</Text>
                       </View>
-                    ) : null}
-                    <Text style={styles.pTime}>T: {p.horarioEntrada} - {p.horarioSaida}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <MaterialCommunityIcons name="swap-horizontal" size={16} color={isVolta ? colors.graphite : '#DF0A0A'} />
+                        <Text style={{ fontWeight: 'bold', color: isVolta ? colors.graphite : '#DF0A0A', fontSize: 12 }}>
+                          {direction}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.groupMembersList}>
+                      {group.map((p: any, pIdx: number) => (
+                        <View key={pIdx} style={styles.miniPassengerBox}>
+                          <View style={{ flex: 1, paddingRight: 8 }}>
+                            <Text style={styles.miniPName}>👤 {p.nome}</Text>
+                            <Text style={styles.miniPAddress}>📍 {p.endereco}</Text>
+                            {p.setor ? (
+                              <View style={styles.miniActionBadge}>
+                                <Text style={styles.miniActionText}>{p.setor}</Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          {p.endereco || (p.latitude && p.longitude) ? (
+                            <TouchableOpacity style={styles.miniWazeIconBtn} onPress={() => setSelectedPassengerForGPS(p)}>
+                              <MaterialCommunityIcons name="google-maps" size={24} color="#DF0A0A" />
+                              <Text style={styles.miniNavText}>NAV</Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
+                      ))}
+                    </View>
                   </View>
-                  {p.endereco || (p.latitude && p.longitude) ? (
-                    <TouchableOpacity style={styles.wazeIconBtn} onPress={() => setSelectedPassengerForGPS(p)}>
-                      <MaterialCommunityIcons name="google-maps" size={32} color="#DF0A0A" />
-                      <Text style={[styles.wazeBtnText, { color: '#DF0A0A' }]}>NAV</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-              ))}
+                );
+              })}
 
-              <View style={{height: 20}} />
+              <View style={styles.divider} />
+              <Text style={styles.passengersTitle}>GERENCIAR VIAGENS</Text>
 
-              {shift.status === 'pending' ? (
-                <TouchableOpacity style={styles.startBtn} onPress={() => setStartingTrip(shift)}>
-                  <Text style={styles.btnText}>INICIAR VIAGEM</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={styles.endBtn} onPress={() => setClosingTrip(shift)}>
-                  <Text style={styles.btnText}>FINALIZAR VIAGEM</Text>
-                </TouchableOpacity>
-              )}
+              {consolidated.originalShifts.map((shift) => {
+                const label = shift.destino?.toUpperCase().includes('JBS/CASA') ? 'Volta (JBS ➔ Casa)' : 'Ida (Casa ➔ JBS)';
+                const isActive = shift.status === 'active';
+                return (
+                  <View key={shift.id} style={styles.shiftActionCard}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.shiftActionLabel}>{label}</Text>
+                      <Text style={[styles.shiftStatusLabel, { color: isActive ? colors.green : colors.graphiteLight }]}>
+                        {isActive ? '● EM ANDAMENTO' : '○ PENDENTE'}
+                      </Text>
+                    </View>
+                    {shift.status === 'pending' ? (
+                      <TouchableOpacity style={styles.startBtnSmall} onPress={() => setStartingTrip(shift)}>
+                        <Text style={styles.btnTextSmall}>INICIAR</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity style={styles.endBtnSmall} onPress={() => setClosingTrip(shift)}>
+                        <Text style={styles.btnTextSmall}>FINALIZAR</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
             </AnimatedCard>
-          ))
-        ) : (
+          );
+        })() : (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTextGarrafal}>SEM ESCALAS PARA HOJE</Text>
             <Text style={styles.emptySub}>Você está livre. Aproveite o descanso!</Text>
-            <TouchableOpacity 
-               style={{width: 50, height: 50, marginTop: 50}} 
-               onPress={() => setClosingTrip({ id: 'test', carroPlaca: 'TEST', kmInicial: 10000, motoristaNome: 'Teste' })}
-               onLongPress={() => Alert.alert('Modo Teste')}
-            />
           </View>
         )}
       </ScrollView>
@@ -448,5 +547,117 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.27,
     shadowRadius: 4.65,
     zIndex: 99
+  },
+  passengerGroupCard: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#F3F4F6',
+    marginBottom: 15,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  passengerGroupHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  groupMembersList: {
+    padding: 12,
+    gap: 8,
+  },
+  miniPassengerBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  miniPName: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: colors.graphite,
+  },
+  miniPAddress: {
+    fontSize: 13,
+    color: colors.graphiteLight,
+    marginTop: 3,
+  },
+  miniActionBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+    marginTop: 4,
+    alignSelf: 'flex-start',
+  },
+  miniActionText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#B45309',
+  },
+  miniWazeIconBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 12,
+    borderLeftWidth: 1,
+    borderLeftColor: '#E5E7EB',
+    width: 60,
+  },
+  miniNavText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#DF0A0A',
+    marginTop: 2,
+  },
+  shiftActionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  shiftActionLabel: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: colors.graphite,
+  },
+  shiftStatusLabel: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginTop: 3,
+  },
+  startBtnSmall: {
+    backgroundColor: colors.green,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  endBtnSmall: {
+    backgroundColor: colors.red,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  btnTextSmall: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   }
 });

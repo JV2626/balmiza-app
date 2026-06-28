@@ -273,7 +273,7 @@ export const AdminDispatchScreen = () => {
         return {
           nome: found ? found.nome : p.nome,
           endereco: found ? found.endereco : (p.endereco || ''),
-          setor: found ? (found.setor || p.setor || '') : (p.setor || data.setorRequisicao || 'PEGAR AMOSTRAS'),
+          setor: found ? (found.setor || p.setor || '') : (p.setor || data.setorRequisicao || ''),
           horarioEntrada: p.horarioEntrada || '08:00',
           horarioSaida: p.horarioSaida || '09:00',
           latitude: found && found.latitude ? found.latitude : 0,
@@ -330,7 +330,7 @@ export const AdminDispatchScreen = () => {
       return {
         nome: p.nome,
         endereco: p.endereco || 'Itapetininga, SP',
-        setor: p.setor || 'PEGAR AMOSTRAS',
+        setor: p.setor || '',
         horarioEntrada: p.horarioEntrada || '08:00',
         horarioSaida: p.horarioSaida || '08:10',
         status: 'pendente',
@@ -551,7 +551,7 @@ const data = JSON.parse(jsonText);
             return {
               nome: matched ? matched.nome : p.nome,
               endereco: matched ? matched.endereco : 'Itapetininga, SP',
-              setor: p.setor || (matched ? matched.setor : 'PEGAR AMOSTRAS'),
+              setor: p.setor || (matched ? matched.setor : ''),
               horarioEntrada: p.horarioEntrada || '08:00',
               horarioSaida: p.horarioSaida || '08:10',
               destino: p.destino || scDestino,
@@ -612,7 +612,7 @@ const data = JSON.parse(jsonText);
             return {
               nome: matched ? matched.nome : p.nome,
               endereco: matched ? matched.endereco : 'Itapetininga, SP',
-              setor: p.setor || (matched ? matched.setor : 'PEGAR AMOSTRAS'),
+              setor: p.setor || (matched ? matched.setor : ''),
               horarioEntrada: p.horarioEntrada || '08:00',
               horarioSaida: p.horarioSaida || '08:10',
               latitude: matched && matched.latitude ? matched.latitude : 0,
@@ -687,7 +687,7 @@ const data = JSON.parse(jsonText);
       {
         nome: '1. Coleta JBS Tatuí',
         endereco: 'JBS - Rod. Antônio Romano Schincariol, Km 116, Tatuí - SP',
-        setor: 'PEGAR AMOSTRAS',
+        setor: '',
         horarioEntrada: '08:00',
         horarioSaida: '09:00',
         status: 'pendente',
@@ -725,7 +725,7 @@ const data = JSON.parse(jsonText);
     setPassengers([...passengers, {
       nome: fav.nome,
       endereco: fav.endereco,
-      setor: fav.setor || 'PEGAR AMOSTRAS',
+      setor: fav.setor || '',
       horarioEntrada: '08:00',
       horarioSaida: '09:00',
       status: 'pendente',
@@ -776,7 +776,7 @@ const data = JSON.parse(jsonText);
       await addDoc(collection(db, 'locais_favoritos'), {
         nome: p.nome,
         endereco: p.endereco,
-        setor: p.setor || 'PEGAR AMOSTRAS',
+        setor: p.setor || '',
         latitude: lat,
         longitude: lon
       });
@@ -1272,7 +1272,7 @@ const data = JSON.parse(jsonText);
                                       await addDoc(collection(db, 'locais_favoritos'), {
                                         nome: p.nome,
                                         endereco: p.endereco,
-                                        setor: p.setor || 'PEGAR AMOSTRAS',
+                                        setor: p.setor || '',
                                         latitude: lat,
                                         longitude: lon
                                       });
@@ -1305,7 +1305,7 @@ const data = JSON.parse(jsonText);
                           updated[index].paradas.push({
                             nome: '',
                             endereco: '',
-                            setor: 'PEGAR AMOSTRAS',
+                            setor: '',
                             horarioEntrada: '08:00',
                             horarioSaida: '08:10',
                             latitude: 0,
@@ -1540,7 +1540,7 @@ const data = JSON.parse(jsonText);
                             ...newP[idx],
                             nome: item.nome,
                             endereco: item.endereco,
-                            setor: item.setor || newP[idx].setor || 'PEGAR AMOSTRAS',
+                            setor: item.setor || newP[idx].setor || '',
                             latitude: item.latitude || 0,
                             longitude: item.longitude || 0,
                             isNew: false
