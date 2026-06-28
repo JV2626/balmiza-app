@@ -80,14 +80,17 @@ export const DriverHomeScreen = ({ navigation }: any) => {
       }
     });
 
-    // Carregar veículos ativos
-    try {
-      const vSnap = await getDocs(query(collection(db, 'veiculos'), where('ativo', '==', true)));
-      setAllActiveVehicles(vSnap.docs.map((d: any) => ({ id: d.id, ...d.data() as any })));
-    } catch (e) {
-      console.log('Error loading vehicles for driver', e);
-    }
-    
+    // Carregar veículos ativos em tempo real
+    const unsubVehicles = onSnapshot(
+      query(collection(db, 'veiculos'), where('ativo', '==', true)),
+      (vSnap) => {
+        setAllActiveVehicles(vSnap.docs.map((d: any) => ({ id: d.id, ...d.data() as any })));
+      },
+      (e) => {
+        console.log('Error loading vehicles for driver', e);
+      }
+    );
+
     const q = query(
       collection(db, 'viagens'), 
       where('motoristaId', '==', email.toLowerCase()),
@@ -125,6 +128,7 @@ export const DriverHomeScreen = ({ navigation }: any) => {
       unsubDriver();
       unsubscribe();
       unsubCompleted();
+      unsubVehicles();
     };
   };
 
@@ -688,6 +692,43 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                   </View>
                 );
               })}
+
+              <View style={styles.divider} />
+              
+              {/* Botão de Finalização de Turno Completo */}
+              <TouchableOpacity 
+                style={styles.finishTurnBtn} 
+                onPress={() => {
+                  const originalShift = consolidated.originalShifts[0];
+                  const plate = allocatedVehicle || originalShift.carroPlaca;
+                  let resolvedKm = '0';
+                  if (plate) {
+                    const found = allActiveVehicles.find(v => v.placa === plate);
+                    if (found) resolvedKm = found.kmAtual?.toString() || '0';
+                  }
+
+                  // Tenta deduzir o menor KM inicial entre as viagens do dia
+                  let minKm = Number(resolvedKm);
+                  if (consolidated.groupStates) {
+                    const kms = Object.values(consolidated.groupStates)
+                      .map((gs: any) => Number(gs.kmInicial))
+                      .filter(km => !isNaN(km) && km > 0);
+                    if (kms.length > 0) {
+                      minKm = Math.min(...kms);
+                    }
+                  }
+
+                  setClosingTrip({
+                    ...originalShift,
+                    groupKey: undefined, // indica fechamento de turno completo
+                    kmInicial: minKm
+                  });
+                }}
+              >
+                <MaterialCommunityIcons name="flag-checkered" size={20} color={colors.white} />
+                <Text style={styles.finishTurnBtnText}>FINALIZAR TURNO DE HOJE</Text>
+              </TouchableOpacity>
+
             </AnimatedCard>
           );
         })() : (
@@ -1282,5 +1323,26 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#065F46',
     flex: 1,
+  },
+  finishTurnBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.graphite,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 10,
+    gap: 8,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  finishTurnBtnText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   }
 });
