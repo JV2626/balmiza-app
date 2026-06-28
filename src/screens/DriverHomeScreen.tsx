@@ -125,10 +125,21 @@ export const DriverHomeScreen = ({ navigation }: any) => {
       await setDoc(driverRef, { veiculoAlocado: placa }, { merge: true });
       setAllocatedVehicle(placa);
       setShowVehiclePicker(false);
+
+      // Sincronizar a placa nos roteiros ativos/pendentes do motorista no banco de dados
+      if (pendingShifts.length > 0) {
+        for (const shift of pendingShifts) {
+          await updateDoc(doc(db, 'viagens', shift.id), {
+            carroPlaca: placa
+          });
+        }
+      }
+
       const found = allActiveVehicles.find(v => v.placa === placa);
       const vehicleLabel = found ? `${found.modelo} - ${found.placa}` : placa;
       Alert.alert('Sucesso', `Seu veículo atual foi definido como ${vehicleLabel}.`);
     } catch (e) {
+      console.log('Error updating allocated vehicle:', e);
       Alert.alert('Erro', 'Não foi possível atualizar o veículo.');
     }
   };
@@ -219,7 +230,8 @@ export const DriverHomeScreen = ({ navigation }: any) => {
   const getSelectedVehicleModel = () => {
     let plate = allocatedVehicle;
     if (!plate && pendingShifts.length > 0) {
-      plate = pendingShifts[0].carroPlaca;
+      const shiftWithCar = pendingShifts.find(s => s.carroPlaca);
+      if (shiftWithCar) plate = shiftWithCar.carroPlaca;
     }
     if (!plate) return 'NENHUM ALOCADO';
     const found = allActiveVehicles.find(v => v.placa === plate);
