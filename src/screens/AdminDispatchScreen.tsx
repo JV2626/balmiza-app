@@ -512,8 +512,7 @@ export const AdminDispatchScreen = () => {
       } else {
         jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
       }
-
-      const data = JSON.parse(jsonText);
+const data = JSON.parse(jsonText);
 
       const dbItems = [
         ...favoritesList.map(f => ({ ...f, isFavorite: true, type: 'Local' })),
@@ -521,15 +520,29 @@ export const AdminDispatchScreen = () => {
       ];
 
       if (data.isMulti && Array.isArray(data.scales)) {
-        const resolvedScales = data.scales.map((sc: any, scIdx: number) => {
-          let resolvedPlaca = sc.carroPlaca || '';
-          if (!resolvedPlaca && sc.motoristaEmail) {
-            const dr = drivers.find(d => d.email.toLowerCase() === sc.motoristaEmail.toLowerCase());
-            if (dr && dr.veiculoAlocado) {
-              resolvedPlaca = dr.veiculoAlocado;
+        const grouped: { [key: string]: any } = {};
+
+        data.scales.forEach((sc: any) => {
+          const key = (sc.motoristaEmail || sc.motoristaNome || 'DESCONHECIDO').toLowerCase();
+
+          if (!grouped[key]) {
+            let resolvedPlaca = sc.carroPlaca || '';
+            if (!resolvedPlaca && sc.motoristaEmail) {
+              const dr = drivers.find(d => d.email.toLowerCase() === sc.motoristaEmail.toLowerCase());
+              if (dr && dr.veiculoAlocado) {
+                resolvedPlaca = dr.veiculoAlocado;
+              }
             }
+            grouped[key] = {
+              driverName: sc.motoristaNome || (sc.motoristaEmail ? sc.motoristaEmail.split('@')[0].toUpperCase() : 'DESCONHECIDO'),
+              driverEmail: sc.motoristaEmail || '',
+              carroPlaca: resolvedPlaca,
+              date: sc.data || formattedToday,
+              paradas: []
+            };
           }
 
+          const scDestino = sc.destino || 'CASA/JBS';
           const resolvedParadas = sc.paradas.map((p: any) => {
             const matched = dbItems.find(item => 
               item.nome.toLowerCase().includes(p.nome.toLowerCase().split(' ')[0]) || 
@@ -541,6 +554,7 @@ export const AdminDispatchScreen = () => {
               setor: p.setor || (matched ? matched.setor : 'PEGAR AMOSTRAS'),
               horarioEntrada: p.horarioEntrada || '08:00',
               horarioSaida: p.horarioSaida || '08:10',
+              destino: p.destino || scDestino,
               latitude: matched && matched.latitude ? matched.latitude : 0,
               longitude: matched && matched.longitude ? matched.longitude : 0,
               status: 'pendente',
@@ -548,14 +562,17 @@ export const AdminDispatchScreen = () => {
             };
           });
 
+          grouped[key].paradas.push(...resolvedParadas);
+        });
+
+        const resolvedScales = Object.keys(grouped).map((key, scIdx) => {
+          const item = grouped[key];
+          // Ordenar as paradas cronologicamente pelo horário de entrada
+          item.paradas.sort((a: any, b: any) => a.horarioEntrada.localeCompare(b.horarioEntrada));
+
           return {
             id: `multi-${Date.now()}-${scIdx}`,
-            driverName: sc.motoristaNome || (sc.motoristaEmail ? sc.motoristaEmail.split('@')[0].toUpperCase() : 'DESCONHECIDO'),
-            driverEmail: sc.motoristaEmail || '',
-            carroPlaca: resolvedPlaca,
-            date: sc.data || formattedToday,
-            destino: sc.destino || 'Casa X JBS',
-            paradas: resolvedParadas,
+            ...item,
             launched: false
           };
         });
@@ -946,7 +963,15 @@ export const AdminDispatchScreen = () => {
                     const sc = updated[i];
                     if (sc.launched) continue;
                     try {
-                      await saveScale(sc.driverEmail, sc.carroPlaca, sc.date, sc.destino, sc.paradas);
+                      const groups: { [key: string]: any[] } = {};
+                      sc.paradas.forEach((p: any) => {
+                        const dest = p.destino || 'CASA/JBS';
+                        if (!groups[dest]) groups[dest] = [];
+                        groups[dest].push(p);
+                      });
+                      for (const dest of Object.keys(groups)) {
+                        await saveScale(sc.driverEmail, sc.carroPlaca, sc.date, dest, groups[dest]);
+                      }
                       sc.launched = true;
                       successCount++;
                     } catch (err) {
@@ -1014,7 +1039,7 @@ export const AdminDispatchScreen = () => {
                   {!isExpanded && (
                     <View style={{ marginVertical: 4 }}>
                       <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.graphite }}>
-                        📅 {sc.date} | 🔄 {sc.destino}
+                        📅 {sc.date} | 🔄 Escala Consolidada
                       </Text>
                     </View>
                   )}
@@ -1023,19 +1048,28 @@ export const AdminDispatchScreen = () => {
                   {!isExpanded ? (
                     <>
                       <Text style={styles.stopsHeader}>Paradas ({sc.paradas.length})</Text>
-                      <View style={[styles.stopsListCompact, { maxHeight: 90 }]}>
-                        {sc.paradas.map((p: any, pIdx: number) => (
-                          <View key={pIdx} style={styles.stopLineCompact}>
-                            <MaterialCommunityIcons 
-                              name={p.isNew ? "alert-circle" : "check-circle"} 
-                              size={12} 
-                              color={p.isNew ? "#B45309" : colors.green} 
-                            />
-                            <Text style={[styles.stopTextCompact, p.isNew && { color: '#B45309' }]} numberOfLines={1}>
-                              {p.horarioEntrada} - {p.nome}
-                            </Text>
-                          </View>
-                        ))}
+                      <View style={[styles.stopsListCompact, { maxHeight: 110 }]}>
+                        {sc.paradas.map((p: any, pIdx: number) => {
+                          const isVolta = p.destino.toUpperCase().includes('JBS/CASA') || 
+                                          p.destino.toUpperCase().includes('JBSXCASA') ||
+                                          p.destino.toUpperCase().includes('JBS X CASA') ||
+                                          p.destino.toUpperCase().includes('JBS-CASA') ||
+                                          p.destino.toUpperCase().includes('JBS > CASA');
+                          const destTag = isVolta ? 'Volta' : 'Ida';
+                          return (
+                            <View key={pIdx} style={styles.stopLineCompact}>
+                              <MaterialCommunityIcons 
+                                name={p.isNew ? "alert-circle" : "check-circle"} 
+                                size={12} 
+                                color={p.isNew ? "#B45309" : colors.green} 
+                              />
+                              <Text style={[styles.stopTextCompact, p.isNew && { color: '#B45309' }]} numberOfLines={1}>
+                                <Text style={{ fontWeight: 'bold', color: '#DF0A0A' }}>{p.horarioEntrada}</Text>
+                                <Text style={{ color: '#6B7280', fontSize: 10, fontWeight: 'bold' }}> [{destTag}]</Text> - {p.nome}
+                              </Text>
+                            </View>
+                          );
+                        })}
                       </View>
                     </>
                   ) : (
@@ -1169,7 +1203,17 @@ export const AdminDispatchScreen = () => {
                                 placeholder="Entrada (HH:MM)"
                               />
                               <TextInput 
-                                style={[styles.smallStopInput, { flex: 1 }]}
+                                style={[styles.smallStopInput, { flex: 1.2 }]}
+                                value={p.destino}
+                                onChangeText={(val) => {
+                                  const updated = [...multiScales];
+                                  updated[index].paradas[pIdx].destino = val;
+                                  setMultiScales(updated);
+                                }}
+                                placeholder="Sentido"
+                              />
+                              <TextInput 
+                                style={[styles.smallStopInput, { flex: 1.2 }]}
                                 value={p.setor}
                                 onChangeText={(val) => {
                                   const updated = [...multiScales];
@@ -1292,7 +1336,15 @@ export const AdminDispatchScreen = () => {
                         style={[styles.launchCardBtn, { flex: 1.2 }]}
                         onPress={async () => {
                           try {
-                            await saveScale(sc.driverEmail, sc.carroPlaca, sc.date, sc.destino, sc.paradas);
+                            const groups: { [key: string]: any[] } = {};
+                            sc.paradas.forEach((p: any) => {
+                              const dest = p.destino || 'CASA/JBS';
+                              if (!groups[dest]) groups[dest] = [];
+                              groups[dest].push(p);
+                            });
+                            for (const dest of Object.keys(groups)) {
+                              await saveScale(sc.driverEmail, sc.carroPlaca, sc.date, dest, groups[dest]);
+                            }
                             const updated = [...multiScales];
                             updated[index].launched = true;
                             setMultiScales(updated);
