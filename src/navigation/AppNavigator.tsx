@@ -20,7 +20,6 @@ const Stack = createNativeStackNavigator();
 export function AppNavigator() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<'driver' | 'admin' | null>(null);
-  const [initialRoute, setInitialRoute] = useState<'Login' | 'Home' | 'Admin'>('Login');
 
   useEffect(() => {
     const auth = getFirebaseAuth();
@@ -36,18 +35,14 @@ export function AppNavigator() {
           if (userSnap.exists()) {
             const uData = userSnap.data();
             if (uData && uData.ativo === false) {
-              // Se o motorista está cadastrado mas foi desativado pelo administrador
               await auth.signOut();
               await AsyncStorage.clear();
               setUserRole(null);
-              setInitialRoute('Login');
               setLoading(false);
               return;
             }
             role = (uData?.role as 'driver' | 'admin') || 'driver';
           } else {
-            // Se o perfil do usuário ainda não existe no Firestore, assumimos o papel de 'driver' por padrão.
-            // Isso evita deslogar o usuário em uma corrida de login durante a criação automática do seu perfil.
             role = 'driver';
           }
 
@@ -58,8 +53,6 @@ export function AppNavigator() {
             await AsyncStorage.setItem('@userEmail', cleanEmail);
           }
           
-          setUserRole(role);
-
           if (Platform.OS !== 'web') {
             const hasHardware = await LocalAuthentication.hasHardwareAsync();
             const isEnrolled = await LocalAuthentication.isEnrolledAsync();
@@ -72,27 +65,24 @@ export function AppNavigator() {
               });
               
               if (authResult.success) {
-                setInitialRoute(role === 'admin' ? 'Admin' : 'Home');
+                setUserRole(role);
               } else {
                 await auth.signOut();
                 await AsyncStorage.clear();
                 setUserRole(null);
-                setInitialRoute('Login');
               }
             } else {
-              setInitialRoute(role === 'admin' ? 'Admin' : 'Home');
+              setUserRole(role);
             }
           } else {
-            setInitialRoute(role === 'admin' ? 'Admin' : 'Home');
+            setUserRole(role);
           }
         } else {
           setUserRole(null);
-          setInitialRoute('Login');
         }
       } catch (e) {
         console.log('Erro na validação de sessão:', e);
         setUserRole(null);
-        setInitialRoute('Login');
       } finally {
         setLoading(false);
       }
@@ -111,17 +101,19 @@ export function AppNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="Home" component={DriverHomeScreen} />
-        <Stack.Screen name="DamageReport" component={DamageReportScreen} />
-
-        {/* Telas administrativas protegidas e condicionalmente declaradas */}
-        {userRole === 'admin' && (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {userRole === null ? (
+          <Stack.Screen name="Login" component={LoginScreen} />
+        ) : userRole === 'admin' ? (
           <>
             <Stack.Screen name="Admin" component={AdminTabNavigator} />
             <Stack.Screen name="EmployeesManagement" component={EmployeesManagementScreen} />
             <Stack.Screen name="FavoriteLocations" component={FavoriteLocationsScreen} />
+          </>
+        ) : (
+          <>
+            <Stack.Screen name="Home" component={DriverHomeScreen} />
+            <Stack.Screen name="DamageReport" component={DamageReportScreen} />
           </>
         )}
       </Stack.Navigator>

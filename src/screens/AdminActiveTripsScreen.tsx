@@ -43,19 +43,21 @@ export const AdminActiveTripsScreen = () => {
     setAlertVisible(true);
   };
 
-  const handleDeleteTrip = (tripId: string) => {
+  const handleDeleteTrip = (tripIds: string[]) => {
     showCustomAlert(
       'Confirmar Exclusão',
-      'Deseja realmente excluir esta escala? Esta ação não pode ser desfeita.',
+      'Deseja realmente excluir esta(s) escala(s)? Esta ação não pode ser desfeita.',
       'warning',
       async () => {
         try {
           const db = getFirebaseDb();
-          await deleteDoc(doc(db, 'viagens', tripId));
-          showCustomAlert('Sucesso', 'Escala excluída com sucesso!', 'success');
+          for (const id of tripIds) {
+            await deleteDoc(doc(db, 'viagens', id));
+          }
+          showCustomAlert('Sucesso', 'Escala(s) excluída(s) com sucesso!', 'success');
         } catch (e) {
           console.log('Error deleting trip', e);
-          showCustomAlert('Erro', 'Ocorreu um erro ao excluir a escala.', 'error');
+          showCustomAlert('Erro', 'Ocorreu um erro ao excluir a(s) escala(s).', 'error');
         }
       }
     );
@@ -98,14 +100,46 @@ export const AdminActiveTripsScreen = () => {
     setSaving(true);
     try {
       const db = getFirebaseDb();
-      await updateDoc(doc(db, 'viagens', selectedTrip.id), {
-        motoristaId: editDriverEmail.toLowerCase().trim(),
-        motoristaNome: editDriverEmail.trim(),
-        carroPlaca: editVehiclePlate.toUpperCase().trim(),
-        data: editDate.trim(),
-        passageiros: editPassengers
+      const passengersByTrip: { [key: string]: any[] } = {};
+      
+      // Inicializar cada documento de viagem associado ao card agrupado
+      selectedTrip.tripIds.forEach((id: string) => {
+        passengersByTrip[id] = [];
       });
-      showCustomAlert('Sucesso', 'Escala atualizada com sucesso!', 'success');
+
+      editPassengers.forEach((p: any) => {
+        let tripId = p.originalTripId;
+        
+        // Se for um passageiro recém adicionado sem tripId original, tenta deduzir pela direção (destinoTag)
+        if (!tripId) {
+          const isVolta = p.destinoTag?.toUpperCase().includes('VOLTA') || p.destinoTag?.toUpperCase().includes('JBS/CASA');
+          const matchedTrip = selectedTrip.originalTrips.find((t: any) => {
+            const tVolta = t.destino?.toUpperCase().includes('JBS/CASA') || 
+                           t.destino?.toUpperCase().includes('JBSXCASA') ||
+                           t.destino?.toUpperCase().includes('JBS X CASA') ||
+                           t.destino?.toUpperCase().includes('JBS-CASA') ||
+                           t.destino?.toUpperCase().includes('JBS > CASA');
+            return isVolta === tVolta;
+          });
+          tripId = matchedTrip ? matchedTrip.id : selectedTrip.tripIds[0];
+        }
+
+        const { destinoTag, originalTripId, ...cleanPassenger } = p;
+        passengersByTrip[tripId].push(cleanPassenger);
+      });
+
+      // Salvar as alterações em cada um dos documentos Firestore divididos
+      for (const tripId of selectedTrip.tripIds) {
+        await updateDoc(doc(db, 'viagens', tripId), {
+          motoristaId: editDriverEmail.toLowerCase().trim(),
+          motoristaNome: editDriverEmail.trim(),
+          carroPlaca: editVehiclePlate.toUpperCase().trim(),
+          data: editDate.trim(),
+          passageiros: passengersByTrip[tripId]
+        });
+      }
+
+      showCustomAlert('Sucesso', 'Escalas atualizadas com sucesso!', 'success');
       setIsEditModalVisible(false);
     } catch (e) {
       console.log('Error updating trip', e);
@@ -124,13 +158,68 @@ export const AdminActiveTripsScreen = () => {
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const trips = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-      // Sort: active first, then pending
-      trips.sort((a, b) => {
+      
+      // Agrupar escalas ativas por motorista
+      const grouped: { [key: string]: any } = {};
+      trips.forEach(t => {
+        const key = (t.motoristaId || t.motoristaNome || 'DESCONHECIDO').toLowerCase();
+        
+        if (!grouped[key]) {
+          grouped[key] = {
+            id: key,
+            motoristaId: t.motoristaId,
+            motoristaNome: t.motoristaNome,
+            carroPlaca: t.carroPlaca,
+            data: t.data,
+            status: t.status,
+            horaInicio: t.horaInicio,
+            passageiros: [],
+            tripIds: [t.id],
+            originalTrips: [t]
+          };
+        } else {
+          grouped[key].tripIds.push(t.id);
+          grouped[key].originalTrips.push(t);
+          if (t.status === 'active') {
+            grouped[key].status = 'active';
+          }
+          if (t.horaInicio && !grouped[key].horaInicio) {
+            grouped[key].horaInicio = t.horaInicio;
+          }
+        }
+
+        const isVolta = t.destino?.toUpperCase().includes('JBS/CASA') || 
+                        t.destino?.toUpperCase().includes('JBSXCASA') ||
+                        t.destino?.toUpperCase().includes('JBS X CASA') ||
+                        t.destino?.toUpperCase().includes('JBS-CASA') ||
+                        t.destino?.toUpperCase().includes('JBS > CASA');
+        const destTag = isVolta ? 'Volta' : 'Ida';
+
+        if (t.passageiros) {
+          const taggedPassengers = t.passageiros.map((p: any) => ({
+            ...p,
+            destinoTag: destTag,
+            originalTripId: t.id
+          }));
+          grouped[key].passageiros.push(...taggedPassengers);
+        }
+      });
+
+      const groupedList = Object.keys(grouped).map(key => {
+        const item = grouped[key];
+        // Ordenar as paradas do motorista cronologicamente
+        item.passageiros.sort((a: any, b: any) => (a.horarioEntrada || '').localeCompare(b.horarioEntrada || ''));
+        return item;
+      });
+
+      // Ordenar escalas por status (em rota primeiro, depois pendentes)
+      groupedList.sort((a, b) => {
         if (a.status === 'active' && b.status === 'pending') return -1;
         if (a.status === 'pending' && b.status === 'active') return 1;
-        return (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0);
+        return 0;
       });
-      setActiveTrips(trips);
+
+      setActiveTrips(groupedList);
       setLoading(false);
     });
 
@@ -186,9 +275,15 @@ export const AdminActiveTripsScreen = () => {
 
               <View style={styles.divider} />
               <Text style={styles.passengersTitle}>{trip.passageiros?.length || 0} PASSAGEIRO(S)</Text>
-              {trip.passageiros?.map((p: any, idx: number) => (
-                <Text key={idx} style={styles.passengerText}>• {p.nome} ({p.horarioEntrada} - {p.horarioSaida})</Text>
-              ))}
+              {trip.passageiros?.map((p: any, idx: number) => {
+                const tag = p.destinoTag || 'Ida';
+                return (
+                  <Text key={idx} style={styles.passengerText}>
+                    • <Text style={{ color: '#DF0A0A' }}>{p.horarioEntrada}</Text>
+                    <Text style={{ color: '#6B7280', fontSize: 13, fontWeight: 'bold' }}> [{tag}]</Text> - {p.nome}
+                  </Text>
+                );
+              })}
 
               <View style={styles.cardDivider} />
               <View style={styles.actionRow}>
@@ -196,7 +291,7 @@ export const AdminActiveTripsScreen = () => {
                   <MaterialCommunityIcons name="pencil" size={16} color={colors.white} />
                   <Text style={styles.btnText}>Alterar</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteTrip(trip.id)}>
+                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteTrip(trip.tripIds)}>
                   <MaterialCommunityIcons name="trash-can" size={16} color={colors.white} />
                   <Text style={styles.btnText}>Excluir</Text>
                 </TouchableOpacity>
@@ -264,16 +359,22 @@ export const AdminActiveTripsScreen = () => {
                     onChangeText={(val) => handleUpdatePassenger(idx, 'nome', val)}
                   />
 
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
                     <TextInput
                       style={[styles.modalInputSmall, { flex: 1 }]}
-                      placeholder="Entrada (Ex: 07:30)"
+                      placeholder="Entrada"
                       value={p.horarioEntrada}
                       onChangeText={(val) => handleUpdatePassenger(idx, 'horarioEntrada', val)}
                     />
                     <TextInput
+                      style={[styles.modalInputSmall, { flex: 1.2 }]}
+                      placeholder="Sentido (Ida/Volta)"
+                      value={p.destinoTag}
+                      onChangeText={(val) => handleUpdatePassenger(idx, 'destinoTag', val)}
+                    />
+                    <TextInput
                       style={[styles.modalInputSmall, { flex: 1 }]}
-                      placeholder="Saída (Ex: 17:30)"
+                      placeholder="Saída"
                       value={p.horarioSaida}
                       onChangeText={(val) => handleUpdatePassenger(idx, 'horarioSaida', val)}
                     />
