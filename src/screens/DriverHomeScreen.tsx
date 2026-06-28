@@ -10,6 +10,9 @@ import { AnimatedCard } from '../components/AnimatedCard';
 import { GPSModal } from '../components/GPSModal';
 import { ReembolsoModal } from '../components/ReembolsoModal';
 import { DriverAIChatModal } from '../components/DriverAIChatModal';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { AvisosModal, useAvisosNaoLidos } from '../components/AvisosModal';
+import { DriverChatModal, useChatNaoLido } from '../components/DriverChatModal';
 
 const colors = {
   white: '#FFFFFF',
@@ -25,6 +28,11 @@ export const DriverHomeScreen = ({ navigation }: any) => {
   const [loading, setLoading] = useState(true);
   const [driverEmail, setDriverEmail] = useState('');
   const [pendingShifts, setPendingShifts] = useState<any[]>([]);
+  const isOnline = useNetworkStatus();
+  const avisosNaoLidos = useAvisosNaoLidos(driverEmail);
+  const chatNaoLido = useChatNaoLido(driverEmail);
+  const [showAvisos, setShowAvisos] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   
   const [closingTrip, setClosingTrip] = useState<any>(null);
   const [startingTrip, setStartingTrip] = useState<any>(null);
@@ -388,15 +396,48 @@ export const DriverHomeScreen = ({ navigation }: any) => {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.greeting}>Olá, {driverEmail.split('@')[0]}</Text>
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-          <MaterialCommunityIcons name="logout" size={24} color={colors.red} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {/* Botão de Chat com badge */}
+          <TouchableOpacity onPress={() => setShowChat(true)} style={styles.headerIconBtn}>
+            <MaterialCommunityIcons name="chat-outline" size={24} color={colors.graphite} />
+            {chatNaoLido > 0 && (
+              <View style={styles.badgeContainer}>
+                <Text style={styles.badgeText}>{chatNaoLido > 9 ? '9+' : chatNaoLido}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          {/* Botão de Avisos com badge */}
+          <TouchableOpacity onPress={() => setShowAvisos(true)} style={styles.headerIconBtn}>
+            <MaterialCommunityIcons name="bell-outline" size={24} color={colors.graphite} />
+            {avisosNaoLidos > 0 && (
+              <View style={styles.badgeContainer}>
+                <Text style={styles.badgeText}>
+                  {avisosNaoLidos > 9 ? '9+' : avisosNaoLidos}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
+            <MaterialCommunityIcons name="logout" size={24} color={colors.red} />
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Banner de Status Offline */}
+      {!isOnline && (
+        <View style={styles.offlineBanner}>
+          <MaterialCommunityIcons name="wifi-off" size={16} color="#fff" />
+          <Text style={styles.offlineBannerText}>
+            SEM CONEXÃO — Modo Offline. Dados serão sincronizados ao reconectar.
+          </Text>
+        </View>
+      )}
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         
         {/* Painel de Carro Alocado do Motorista */}
         <View style={styles.vehicleCardContainer}>
+
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <MaterialCommunityIcons name="steering" size={32} color="#DF0A0A" />
             <View style={{ flex: 1 }}>
@@ -685,6 +726,20 @@ export const DriverHomeScreen = ({ navigation }: any) => {
         driverEmail={driverEmail}
       />
 
+      {/* MODAL DE AVISOS DA CENTRAL */}
+      <AvisosModal
+        visible={showAvisos}
+        onClose={() => setShowAvisos(false)}
+        driverEmail={driverEmail}
+      />
+
+      {/* MODAL DE CHAT COM ADMIN */}
+      <DriverChatModal
+        visible={showChat}
+        onClose={() => setShowChat(false)}
+        driverEmail={driverEmail}
+      />
+
       {/* MODAL REGISTRAR VIAGEM EXTRA */}
       <Modal visible={showExtraModal} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
@@ -804,6 +859,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 60, backgroundColor: colors.white, elevation: 3, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.1, shadowRadius: 3, zIndex: 10 },
   greeting: { fontSize: 24, fontWeight: '900', color: colors.graphite, textTransform: 'uppercase' },
+  headerIconBtn: { padding: 8, backgroundColor: '#F4F6F8', borderRadius: 8, position: 'relative' },
+  badgeContainer: {
+    position: 'absolute', top: 2, right: 2,
+    backgroundColor: '#DF0A0A', borderRadius: 8, minWidth: 16, height: 16,
+    justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3,
+  },
+  badgeText: { color: '#fff', fontSize: 9, fontWeight: '900' },
   logoutBtn: { padding: 10, backgroundColor: '#FFF5F5', borderRadius: 8 },
   content: { padding: 20, paddingBottom: 135 }, 
   damageBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white, borderWidth: 2, borderColor: colors.border, height: 58, borderRadius: 12, marginBottom: 30, gap: 10, elevation: 2, shadowColor: '#000', shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 2 },
@@ -853,6 +915,8 @@ const styles = StyleSheet.create({
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 100 },
   emptyTextGarrafal: { fontSize: 40, fontWeight: '900', color: colors.graphite, textAlign: 'center', lineHeight: 45, textTransform: 'uppercase' },
   emptySub: { fontSize: 18, color: colors.graphiteLight, textAlign: 'center', marginTop: 15, fontWeight: 'bold' },
+  offlineBanner: { backgroundColor: '#374151', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
+  offlineBannerText: { color: '#fff', fontSize: 12, fontWeight: '700', flex: 1 },
   vehicleCardContainer: { backgroundColor: colors.white, padding: 20, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 20, elevation: 3, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.1, shadowRadius: 3 },
   vehicleSecLabel: { fontSize: 12, fontWeight: '900', color: colors.graphiteLight },
   vehicleSecValue: { fontSize: 18, fontWeight: '900', color: colors.graphite, marginTop: 2 },

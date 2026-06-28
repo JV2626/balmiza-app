@@ -15,6 +15,7 @@ import { EmployeesManagementScreen } from '../screens/EmployeesManagementScreen'
 
 import { getFirebaseAuth, getFirebaseDb } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { registerForPushNotifications } from '../utils/notifications';
 
 const Stack = createNativeStackNavigator();
 
@@ -77,6 +78,11 @@ export function AppNavigator() {
             }
           } else {
             setUserRole(role);
+          }
+
+          // Registrar token de push notification em background (não-bloqueante)
+          if (Platform.OS !== 'web' && cleanEmail) {
+            registerForPushNotifications(cleanEmail).catch(() => {});
           }
         } else {
           setUserRole(null);

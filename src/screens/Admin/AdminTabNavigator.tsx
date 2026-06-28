@@ -9,6 +9,8 @@ import { AdminDispatchScreen } from '../AdminDispatchScreen';
 import { AdminDamageReportsScreen } from '../AdminDamageReportsScreen';
 import { AdminSettingsScreen } from '../AdminSettingsScreen';
 import { AIAssistantTab } from './AIAssistantTab';
+import { AvisosAdminTab } from './AvisosAdminTab';
+import { ChatAdminTab } from './ChatAdminTab';
 import { RealTimeAlerts } from '../../components/RealTimeAlerts';
 
 const Tab = createBottomTabNavigator();
@@ -23,7 +25,7 @@ export const AdminTabNavigator = () => {
       <Tab.Navigator
         screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#DF0A0A', // Balmiza Brand Primary (Red)
+        tabBarActiveTintColor: '#DF0A0A',
         tabBarInactiveTintColor: '#6B7280',
         tabBarStyle: {
           backgroundColor: '#FFFFFF',
@@ -45,46 +47,60 @@ export const AdminTabNavigator = () => {
         }
       }}
     >
-      <Tab.Screen 
-        name="Painel" 
-        component={AdminDashboardScreen} 
+      <Tab.Screen
+        name="Painel"
+        component={AdminDashboardScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="chart-box" size={26} color={color} />
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="chart-box" size={26} color={color} />
         }}
       />
-      <Tab.Screen 
-        name="Ativas" 
-        component={AdminActiveTripsScreen} 
+      <Tab.Screen
+        name="Ativas"
+        component={AdminActiveTripsScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="map-marker-path" size={26} color={color} />
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="map-marker-path" size={26} color={color} />
         }}
       />
-      <Tab.Screen 
-        name="Despacho IA" 
-        component={AdminDispatchScreen} 
+      <Tab.Screen
+        name="Despacho IA"
+        component={AdminDispatchScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="robot-outline" size={26} color={color} />
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="robot-outline" size={26} color={color} />
         }}
       />
-      <Tab.Screen 
-        name="Chat IA" 
-        component={AIAssistantTab} 
+      <Tab.Screen
+        name="Avisos"
+        component={AvisosAdminTab}
         options={{
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="robot-happy" size={26} color={color} />
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="bullhorn-outline" size={26} color={color} />
         }}
       />
-      <Tab.Screen 
-        name="Avarias" 
-        component={AdminDamageReportsScreen} 
+      <Tab.Screen
+        name="Mensagens"
+        component={ChatAdminTab}
         options={{
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="car-wrench" size={26} color={color} />
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="chat-outline" size={26} color={color} />
         }}
       />
-      <Tab.Screen 
-        name="Ajustes" 
-        component={AdminSettingsScreen} 
+      <Tab.Screen
+        name="Chat IA"
+        component={AIAssistantTab}
         options={{
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="cog" size={26} color={color} />
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="robot-happy" size={26} color={color} />
+        }}
+      />
+      <Tab.Screen
+        name="Avarias"
+        component={AdminDamageReportsScreen}
+        options={{
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="car-wrench" size={26} color={color} />
+        }}
+      />
+      <Tab.Screen
+        name="Ajustes"
+        component={AdminSettingsScreen}
+        options={{
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="cog" size={26} color={color} />
         }}
       />
     </Tab.Navigator>

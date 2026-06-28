@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Alert } from 'react-native';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Alert, Animated } from 'react-native';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -12,22 +12,33 @@ import { AnimatedCard } from '../../components/AnimatedCard';
 
 export const DashboardTab = ({ navigation }: any) => {
   const [trips, setTrips] = useState<any[]>([]);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    fetchTrips();
-  }, []);
-
-  const fetchTrips = async () => {
-    try {
-      const db = getFirebaseDb();
-      const q = query(collection(db, 'trips'), orderBy('closedAt', 'desc'));
-      const snapshot = await getDocs(q);
+    // Listener em tempo real substituindo o getDocs
+    const db = getFirebaseDb();
+    const q = query(collection(db, 'trips'), orderBy('closedAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedTrips = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setTrips(fetchedTrips);
-    } catch (e) {
+    }, (e) => {
       console.log('Error fetching admin trips', e);
-    }
-  };
+    });
+
+    // Animação do indicador AO VIVO (pulse)
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.2, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    pulse.start();
+
+    return () => {
+      unsubscribe();
+      pulse.stop();
+    };
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -146,7 +157,10 @@ export const DashboardTab = ({ navigation }: any) => {
           <MaterialCommunityIcons name="shield-account" size={32} color={colors.red} style={{marginRight: 10}} />
           <View>
             <Text style={styles.title}>Painel Admin</Text>
-            <Text style={styles.subtitle}>Visão Executiva</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              <Animated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
+              <Text style={styles.subtitle}>AO VIVO</Text>
+            </View>
           </View>
         </View>
         <TouchableOpacity onPress={handleLogout} style={styles.actionBtn}>
@@ -272,7 +286,8 @@ const styles = StyleSheet.create({
   header: { backgroundColor: colors.white, padding: 20, paddingTop: 60, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTitleContainer: { flexDirection: 'row', alignItems: 'center' },
   title: { fontSize: 24, fontWeight: '900', color: colors.graphite },
-  subtitle: { fontSize: 14, color: colors.graphiteLight },
+  subtitle: { fontSize: 12, color: colors.red, fontWeight: '900', letterSpacing: 1 },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.red },
   actionBtn: { padding: 10, backgroundColor: colors.background, borderRadius: 8, elevation: 1 },
   statsContainer: { padding: 20, paddingBottom: 10, flexDirection: 'row', gap: 15 },
   statCard: { flex: 1, backgroundColor: colors.graphite, padding: 20, borderRadius: 16, flexDirection: 'row', alignItems: 'center', elevation: 5 },

@@ -140,5 +140,44 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
+
+    // Coleção: avisos (Canal de avisos admin → motoristas)
+    match /avisos/{avisoId} {
+      // Qualquer usuário autenticado pode ler avisos
+      allow read: if isAuthenticated();
+      // Apenas admins podem criar e excluir avisos
+      allow create, delete: if isAdmin();
+      // Motoristas podem apenas atualizar o campo 'lidos' (marcar como lido)
+      allow update: if isAdmin() || (
+        isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lidos'])
+      );
+    }
+
+    // Coleção: mensagens (Chat direto admin ↔ motorista)
+    // Cada documento é uma conversa identificada pelo email do motorista
+    match /mensagens/{conversaId} {
+      allow read, write: if isAuthenticated();
+
+      // Subcoleção de mensagens individuais da conversa
+      match /msgs/{msgId} {
+        // Leitura: participantes da conversa (motorista ou admin)
+        allow read: if isAuthenticated();
+        // Criação: qualquer usuário autenticado pode criar mensagens
+        allow create: if isAuthenticated();
+        // Atualização: apenas para marcar como lido
+        allow update: if isAuthenticated() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lido']);
+        allow delete: if isAdmin();
+      }
+    }
+
+    // Coleção: mensagens_meta (Metadados das conversas para listagem do admin)
+    match /mensagens_meta/{metaId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
   }
 }

@@ -1,6 +1,6 @@
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -27,7 +27,19 @@ export const getFirebaseAuth = () => {
 let dbInstance: any = null;
 export const getFirebaseDb = () => {
   if (!dbInstance) {
-    dbInstance = getFirestore(getFirebaseApp());
+    // Persistência offline: dados ficam em cache local mesmo sem internet
+    // Funciona na JBS onde o sinal de celular é instável
+    try {
+      dbInstance = initializeFirestore(getFirebaseApp(), {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager()
+        })
+      });
+    } catch (e: any) {
+      // Se já foi inicializado com outra config, reutiliza a instância existente
+      const { getFirestore } = require('firebase/firestore');
+      dbInstance = getFirestore(getFirebaseApp());
+    }
   }
   return dbInstance;
 };
