@@ -81,8 +81,20 @@ function verifyFirebaseToken(token, projectId) {
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  
+  const allowedOrigins = [
+    'https://balmiza-app.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:8082'
+  ];
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', 'https://balmiza-app.vercel.app');
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'OPTIONS,POST');
   res.setHeader(
     'Access-Control-Allow-Headers',
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
