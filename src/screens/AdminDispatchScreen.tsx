@@ -439,7 +439,15 @@ export const AdminDispatchScreen = () => {
       `;
 
       const responseText = await callGeminiSecurely(`${systemPrompt}\n\nInstrução do Usuário:\n"${aiDraftText}"`);
-      let jsonText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+      
+      let jsonText = responseText.trim();
+      const firstCurly = jsonText.indexOf('{');
+      const lastCurly = jsonText.lastIndexOf('}');
+      if (firstCurly !== -1 && lastCurly !== -1 && lastCurly > firstCurly) {
+        jsonText = jsonText.substring(firstCurly, lastCurly + 1);
+      } else {
+        jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+      }
 
       const data = JSON.parse(jsonText);
 
@@ -540,9 +548,10 @@ export const AdminDispatchScreen = () => {
         setAiDraftText('');
       }
 
-    } catch (e) {
+    } catch (e: any) {
       console.log('Erro no Gemini Rascunho', e);
-      showAlert('Erro', 'Não foi possível interpretar a escala. Tente digitar de outra forma.');
+      const errMsg = e.message || 'Não foi possível interpretar a escala. Tente digitar de outra forma.';
+      showAlert('Erro', errMsg);
     } finally {
       setProcessingAiDraft(false);
     }
