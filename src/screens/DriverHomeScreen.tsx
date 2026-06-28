@@ -13,6 +13,7 @@ import { DriverAIChatModal } from '../components/DriverAIChatModal';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { AvisosModal, useAvisosNaoLidos } from '../components/AvisosModal';
 import { DriverChatModal, useChatNaoLido } from '../components/DriverChatModal';
+import { DriverSettingsModal } from '../components/DriverSettingsModal';
 
 const colors = {
   white: '#FFFFFF',
@@ -33,6 +34,7 @@ export const DriverHomeScreen = ({ navigation }: any) => {
   const chatNaoLido = useChatNaoLido(driverEmail);
   const [showAvisos, setShowAvisos] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   
   const [closingTrip, setClosingTrip] = useState<any>(null);
   const [startingTrip, setStartingTrip] = useState<any>(null);
@@ -417,6 +419,10 @@ export const DriverHomeScreen = ({ navigation }: any) => {
               </View>
             )}
           </TouchableOpacity>
+          {/* Botão de Ajustes */}
+          <TouchableOpacity onPress={() => setShowSettings(true)} style={styles.headerIconBtn}>
+            <MaterialCommunityIcons name="cog-outline" size={24} color={colors.graphite} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
             <MaterialCommunityIcons name="logout" size={24} color={colors.red} />
           </TouchableOpacity>
@@ -739,6 +745,14 @@ export const DriverHomeScreen = ({ navigation }: any) => {
         onClose={() => setShowChat(false)}
         driverEmail={driverEmail}
       />
+
+      {/* MODAL DE AJUSTES DO MOTORISTA */}
+      <DriverSettingsModal
+        visible={showSettings}
+        onClose={() => setShowSettings(false)}
+        driverEmail={driverEmail}
+      />
+
 
       {/* MODAL REGISTRAR VIAGEM EXTRA */}
       <Modal visible={showExtraModal} animationType="slide" transparent={true}>

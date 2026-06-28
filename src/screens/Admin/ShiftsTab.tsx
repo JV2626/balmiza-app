@@ -4,6 +4,7 @@ import { collection, addDoc, doc, getDoc, query, where, getDocs, updateDoc, dele
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getFirebaseDb } from '../../config/firebase';
 import { colors } from '../../theme/colors';
+import { sendPushNotification } from '../../utils/notifications';
 
 type Stop = {
   id: string;
@@ -157,16 +158,41 @@ export const ShiftsTab = () => {
         });
       }
       
+      // Notificação Push (Nativa + Web Push)
       try {
-        const userDoc = await getDoc(doc(db, 'users', emailKey));
+        const userDoc = await getDoc(doc(db, 'usuarios', emailKey));
         if (userDoc.exists()) {
-          const pushToken = userDoc.data().pushToken;
-          if (pushToken) {
-            const title = editingShiftId ? 'Atenção: Sua Rota Foi Alterada! 🔄' : 'Nova Escala Designada! 🚗';
-            const body = editingShiftId 
-              ? 'A central atualizou o seu roteiro. Por favor, verifique as novas paradas no aplicativo.'
-              : `Veículo ${vehiclePlate.toUpperCase()} com ${cleanedStops.length} paradas prontas para você.`;
-             await sendPushNotification(pushToken, title, body);
+          const userData = userDoc.data();
+          const driverFirstName = userData.nome ? userData.nome.split(' ')[0] : emailKey.split('@')[0];
+          
+          // Formatar data de hoje para o texto
+          const dataEscala = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+          const title = editingShiftId ? '⚠️ Alteração Urgente na Rota' : '🚗 Rota Lançada';
+          const body = editingShiftId
+            ? 'Alteracao urgente na escala, verifique!'
+            : `${driverFirstName}, sua escalada do dia ${dataEscala} esta lancada entre para verificar.`;
+
+          // 1. Enviar para Web Push se inscrito
+          if (userData.webPushSubscription) {
+            const apiUrl = Platform.OS === 'web'
+              ? '/api/notify-web'
+              : (process.env.EXPO_PUBLIC_API_URL || 'https://balmiza-app.vercel.app') + '/api/notify-web';
+
+            await fetch(apiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                subscription: userData.webPushSubscription,
+                title,
+                body
+              })
+            }).catch(() => {});
+          }
+
+          // 2. Enviar para celular nativo se inscrito
+          if (userData.pushToken) {
+            await sendPushNotification(userData.pushToken, title, body).catch(() => {});
           }
         }
       } catch (pushErr) {

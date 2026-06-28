@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, TextInput, Platform } from 'react-native';
-import { collection, query, where, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getFirebaseDb } from '../config/firebase';
 import { AnimatedCard } from '../components/AnimatedCard';
 import { CustomAlert } from '../components/CustomAlert';
+import { sendPushNotification } from '../utils/notifications';
 
 const colors = {
   white: '#FFFFFF',
@@ -137,6 +138,41 @@ export const AdminActiveTripsScreen = () => {
           data: editDate.trim(),
           passageiros: passengersByTrip[tripId]
         });
+      }
+
+      // Disparar notificações de alteração urgente na escala
+      try {
+        const cleanEmail = editDriverEmail.toLowerCase().trim();
+        const userDoc = await getDoc(doc(db, 'usuarios', cleanEmail));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          const title = '⚠️ Alteração Urgente na Rota';
+          const body = 'Alteracao urgente na escala, verifique!';
+
+          // 1. Enviar para Web Push se inscrito
+          if (userData.webPushSubscription) {
+            const apiUrl = Platform.OS === 'web'
+              ? '/api/notify-web'
+              : (process.env.EXPO_PUBLIC_API_URL || 'https://balmiza-app.vercel.app') + '/api/notify-web';
+
+            await fetch(apiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                subscription: userData.webPushSubscription,
+                title,
+                body
+              })
+            }).catch(() => {});
+          }
+
+          // 2. Enviar para celular nativo se inscrito
+          if (userData.pushToken) {
+            await sendPushNotification(userData.pushToken, title, body).catch(() => {});
+          }
+        }
+      } catch (pushErr) {
+        console.log('Erro ao enviar push de alteração', pushErr);
       }
 
       showCustomAlert('Sucesso', 'Escalas atualizadas com sucesso!', 'success');
