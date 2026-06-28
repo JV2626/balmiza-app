@@ -701,27 +701,41 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                 onPress={() => {
                   const originalShift = consolidated.originalShifts[0];
                   const plate = allocatedVehicle || originalShift.carroPlaca;
+                  
+                  // Buscar o kmAtual do carro para fallback
                   let resolvedKm = '0';
                   if (plate) {
                     const found = allActiveVehicles.find(v => v.placa === plate);
                     if (found) resolvedKm = found.kmAtual?.toString() || '0';
                   }
 
-                  // Tenta deduzir o menor KM inicial entre as viagens do dia
-                  let minKm = Number(resolvedKm);
+                  let initialKm = resolvedKm;
+                  let finalKm = '';
+
                   if (consolidated.groupStates) {
-                    const kms = Object.values(consolidated.groupStates)
-                      .map((gs: any) => Number(gs.kmInicial))
-                      .filter(km => !isNaN(km) && km > 0);
-                    if (kms.length > 0) {
-                      minKm = Math.min(...kms);
+                    const states = Object.values(consolidated.groupStates) as any[];
+                    const completedStates = states.filter(s => s.status === 'completed');
+                    
+                    if (completedStates.length > 0) {
+                      // O KM inicial do turno é o menor KM inicial entre as viagens concluídas
+                      const startKms = completedStates.map(s => Number(s.kmInicial)).filter(k => !isNaN(k) && k > 0);
+                      if (startKms.length > 0) {
+                        initialKm = Math.min(...startKms).toString();
+                      }
+                      
+                      // O KM final do turno é o maior KM final entre as viagens concluídas
+                      const endKms = completedStates.map(s => Number(s.kmFinal)).filter(k => !isNaN(k) && k > 0);
+                      if (endKms.length > 0) {
+                        finalKm = Math.max(...endKms).toString();
+                      }
                     }
                   }
 
                   setClosingTrip({
                     ...originalShift,
                     groupKey: undefined, // indica fechamento de turno completo
-                    kmInicial: minKm
+                    kmInicial: initialKm,
+                    kmFinal: finalKm
                   });
                 }}
               >

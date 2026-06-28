@@ -22,13 +22,14 @@ interface Props {
 
 export const TripClosingModal = ({ visible, onClose, tripData }: Props) => {
   const [kmInicial, setKmInicial] = useState(tripData?.kmInicial?.toString() || '');
-  const [kmFinal, setKmFinal] = useState('');
+  const [kmFinal, setKmFinal] = useState(tripData?.kmFinal?.toString() || '');
   const [observacoes, setObservacoes] = useState('');
   const [fotoUrl, setFotoUrl] = useState('');
   const [loading, setLoading] = useState(false);
 
   React.useEffect(() => {
     if (tripData?.kmInicial) setKmInicial(tripData.kmInicial.toString());
+    if (tripData?.kmFinal) setKmFinal(tripData.kmFinal.toString());
   }, [tripData]);
 
   const takePhoto = async () => {
@@ -118,9 +119,9 @@ export const TripClosingModal = ({ visible, onClose, tripData }: Props) => {
         const grouped: { [key: string]: any[] } = {};
         tripData.passageiros?.forEach((p: any) => {
           const time = p.horarioEntrada || '00:00';
-          const tag = p.destinoTag || (p.destinoLabel?.toUpperCase().includes('JBS/CASA') ? 'Volta' : 'Ida');
-          const dest = p.destinoLabel || (tag === 'Volta' ? 'JBS ➔ Casa' : 'Casa ➔ JBS');
-          const groupKey = `${time}_${tag}_${dest}`;
+          const isVolta = p.destinoTag === 'Volta' || (p.destinoLabel || '').toUpperCase().includes('JBS/CASA') || (p.destinoLabel || '').toUpperCase().includes('CASA');
+          const dest = isVolta ? 'JBS ➔ CASA' : 'CASA ➔ JBS';
+          const groupKey = `${time}_${dest}`;
           if (!grouped[groupKey]) grouped[groupKey] = [];
           grouped[groupKey].push(p);
         });
