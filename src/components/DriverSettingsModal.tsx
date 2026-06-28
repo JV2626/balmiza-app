@@ -150,10 +150,10 @@ export const DriverSettingsModal = ({ visible, onClose, driverEmail }: DriverSet
           
           {/* Card: Notificações */}
           <View style={styles.card}>
-            <Text style={styles.cardLabel}>NOTIFICAÇÕES NO CELULAR</Text>
+            <Text style={styles.cardLabel}>NOTIFICAÇÕES DO DISPOSITIVO</Text>
             <View style={styles.rowBetween}>
               <View style={{ flex: 1, marginRight: 16 }}>
-                <Text style={styles.rowTitle}>Receber atualizações</Text>
+                <Text style={styles.rowTitle}>Permitir alertas</Text>
                 <Text style={styles.rowDesc}>
                   Alertas de novas escalas lançadas, avisos urgentes ou atualizações de rota.
                 </Text>
