@@ -12,7 +12,7 @@ async function getGoogleCertificates() {
   }
 
   return new Promise((resolve, reject) => {
-    https.get('https://www.googleapis.com/robot/v1/metadata/x509/securetoken-system@system.gserviceaccount.com', (res) => {
+    https.get('https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com', (res) => {
       let data = '';
       const cacheControl = res.headers['cache-control'] || '';
       const maxAgeMatch = cacheControl.match(/max-age=(\d+)/);
