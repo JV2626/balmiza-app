@@ -116,7 +116,7 @@ module.exports = async function handler(req, res) {
   if (allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Origin', 'https://balmiza-app.vercel.app');
   }
 
   res.setHeader('Access-Control-Allow-Methods', 'OPTIONS,POST');

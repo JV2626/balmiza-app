@@ -119,27 +119,25 @@ export const DriverHomeScreen = ({ navigation }: any) => {
   };
 
   const handleSelectVehicle = async (placa: string) => {
+    // Optimistic update: atualizar o estado local imediatamente antes de salvar no Firestore
+    setAllocatedVehicle(placa);
+    setShowVehiclePicker(false);
     try {
       const db = getFirebaseDb();
       const driverRef = doc(db, 'usuarios', driverEmail.toLowerCase());
       await setDoc(driverRef, { veiculoAlocado: placa }, { merge: true });
-      setAllocatedVehicle(placa);
-      setShowVehiclePicker(false);
 
       // Sincronizar a placa nos roteiros ativos/pendentes do motorista no banco de dados
       if (pendingShifts.length > 0) {
-        for (const shift of pendingShifts) {
-          await updateDoc(doc(db, 'viagens', shift.id), {
-            carroPlaca: placa
-          });
-        }
+        const updates = pendingShifts.map(shift =>
+          updateDoc(doc(db, 'viagens', shift.id), { carroPlaca: placa })
+        );
+        await Promise.all(updates);
       }
-
-      const found = allActiveVehicles.find(v => v.placa === placa);
-      const vehicleLabel = found ? `${found.modelo} - ${found.placa}` : placa;
-      Alert.alert('Sucesso', `Seu veículo atual foi definido como ${vehicleLabel}.`);
     } catch (e) {
       console.log('Error updating allocated vehicle:', e);
+      // Reverter o estado local em caso de erro
+      setAllocatedVehicle(null);
       Alert.alert('Erro', 'Não foi possível atualizar o veículo.');
     }
   };
@@ -234,8 +232,11 @@ export const DriverHomeScreen = ({ navigation }: any) => {
       if (shiftWithCar) plate = shiftWithCar.carroPlaca;
     }
     if (!plate) return 'NENHUM ALOCADO';
+    // Buscar o modelo pelo nome — mesmo se a placa foi atualizada recentemente
     const found = allActiveVehicles.find(v => v.placa === plate);
-    return found ? `${found.modelo} - ${plate}` : plate;
+    if (found) return `${found.modelo} - ${plate}`;
+    // Fallback: mostrar só a placa se o veículo não estiver no array ainda
+    return plate;
   };
 
   const getConsolidatedShift = () => {

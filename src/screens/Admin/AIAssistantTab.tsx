@@ -126,7 +126,8 @@ export const AIAssistantTab = () => {
 
       const tSnap = await getDocs(collection(db, 'viagens'));
       const trips = tSnap.docs.map(d => ({ 
-        motorista: d.data().motoristaNome || d.data().motoristaId, 
+        // Enviando apenas o primeiro nome para preservar privacidade (LGPD)
+        motorista: (d.data().motoristaNome || d.data().motoristaId || '').split(' ')[0].split('@')[0], 
         carro: d.data().carroPlaca, 
         destino: d.data().destino,
         status: d.data().status 

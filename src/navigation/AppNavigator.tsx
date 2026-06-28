@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { View, Image, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { LoginScreen } from '../screens/LoginScreen';
 import { DriverHomeScreen } from '../screens/DriverHomeScreen';
@@ -93,9 +94,10 @@ export function AppNavigator() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1C1C1E" />
-      </View>
+      <LinearGradient colors={['#1C1C1E', '#09090A']} style={styles.loadingContainer}>
+        <Image source={require('../../assets/logo.png')} style={styles.loadingLogo} resizeMode="contain" />
+        <ActivityIndicator size="large" color="#DF0A0A" />
+      </LinearGradient>
     );
   }
 
@@ -122,7 +124,8 @@ export function AppNavigator() {
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: { flex: 1, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 24 },
+  loadingLogo: { width: 80, height: 100 },
 });
 
 export default AppNavigator;

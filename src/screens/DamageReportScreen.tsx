@@ -81,7 +81,10 @@ export const DamageReportScreen = ({ navigation }: any) => {
     setLoading(true);
     try {
       const db = getFirebaseDb();
-      const email = await AsyncStorage.getItem('@userEmail') || 'desconhecido';
+      const auth = getFirebaseAuth();
+      const email = auth.currentUser?.email?.toLowerCase()
+        || await AsyncStorage.getItem('@userEmail')
+        || 'desconhecido';
       
       await addDoc(collection(db, 'avarias'), {
         motoristaEmail: email,

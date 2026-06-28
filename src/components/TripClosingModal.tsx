@@ -194,7 +194,7 @@ export const TripClosingModal = ({ visible, onClose, tripData }: Props) => {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>FECHAMENTO DE VIAGEM</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+          <TouchableOpacity onPress={loading ? undefined : onClose} style={[styles.closeBtn, loading && { opacity: 0.4 }]}>
             <MaterialCommunityIcons name="close" size={28} color={colors.graphite} />
           </TouchableOpacity>
         </View>

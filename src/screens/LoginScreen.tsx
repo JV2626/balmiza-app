@@ -45,10 +45,24 @@ export const LoginScreen = ({ navigation }: any) => {
   };
 
   const navigateAfterAuth = async () => {
-    const role = await AsyncStorage.getItem('@userRole');
-    if (role === 'admin') {
-      navigation.replace('Admin');
-    } else {
+    try {
+      const auth = getFirebaseAuth();
+      const user = auth.currentUser;
+      if (!user || !user.email) {
+        navigation.replace('Home');
+        return;
+      }
+      const db = getFirebaseDb();
+      const snap = await getDoc(doc(db, 'usuarios', user.email.toLowerCase().trim()));
+      const role = snap.exists() ? (snap.data().role || 'driver') : 'driver';
+      if (role === 'admin') {
+        navigation.replace('Admin');
+      } else {
+        navigation.replace('Home');
+      }
+    } catch (e) {
+      console.log('navigateAfterAuth error:', e);
+      // Fail-safe: redirecionar como driver
       navigation.replace('Home');
     }
   };
