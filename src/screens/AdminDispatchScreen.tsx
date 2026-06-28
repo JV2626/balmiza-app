@@ -110,7 +110,10 @@ export const AdminDispatchScreen = () => {
     setAlertVisible(true);
   };
   
-  const [date, setDate] = useState('');
+  const [date, setDate] = useState(() => {
+    const today = new Date();
+    return `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+  });
   const [destino, setDestino] = useState('Casa X JBS');
   const [passengers, setPassengers] = useState<Passenger[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState('');
