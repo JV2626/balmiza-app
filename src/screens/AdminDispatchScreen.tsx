@@ -112,6 +112,10 @@ export const AdminDispatchScreen = () => {
   
   const [date, setDate] = useState(() => {
     const today = new Date();
+    // Se passar das 15h (3 da tarde), preenche com a data de amanhã por padrão
+    if (today.getHours() >= 15) {
+      today.setDate(today.getDate() + 1);
+    }
     return `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
   });
   const [destino, setDestino] = useState('Casa X JBS');
@@ -1409,6 +1413,37 @@ const data = JSON.parse(jsonText);
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>DADOS DA ESCALA</Text>
             <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="DD/MM/AAAA" />
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: -6, marginBottom: 15 }}>
+              <TouchableOpacity 
+                style={{ 
+                  backgroundColor: '#E5E7EB', 
+                  paddingHorizontal: 12, 
+                  paddingVertical: 6, 
+                  borderRadius: 20 
+                }} 
+                onPress={() => {
+                  const today = new Date();
+                  setDate(`${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`);
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.graphite }}>HOJE 📅</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={{ 
+                  backgroundColor: '#E5E7EB', 
+                  paddingHorizontal: 12, 
+                  paddingVertical: 6, 
+                  borderRadius: 20 
+                }} 
+                onPress={() => {
+                  const tomorrow = new Date();
+                  tomorrow.setDate(tomorrow.getDate() + 1);
+                  setDate(`${String(tomorrow.getDate()).padStart(2, '0')}/${String(tomorrow.getMonth() + 1).padStart(2, '0')}/${tomorrow.getFullYear()}`);
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.graphite }}>AMANHÃ ➡️</Text>
+              </TouchableOpacity>
+            </View>
 
             <Text style={styles.sectionTitle}>SENTIDO DO DESTINO</Text>
             <TextInput style={styles.input} value={destino} onChangeText={setDestino} placeholder="Ex: Casa X JBS ou JBS X Casa" />

@@ -701,20 +701,38 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                 onPress={() => {
                   const originalShift = consolidated.originalShifts[0];
                   
-                  // O KM inicial do turno deve ser o KM inicial original despachado pelo admin (ex: 90808)
-                  let initialKm = originalShift.kmInicial?.toString() || '0';
+                  let initialKm = '0';
                   let finalKm = '';
 
+                  // 1. Tentar pegar o menor KM inicial entre as viagens concluídas do dia (que seja > 0)
                   if (consolidated.groupStates) {
                     const states = Object.values(consolidated.groupStates) as any[];
                     const completedStates = states.filter(s => s.status === 'completed');
                     
                     if (completedStates.length > 0) {
-                      // O KM final do turno é o maior KM final registrado na última viagem concluída
+                      const startKms = completedStates.map(s => Number(s.kmInicial)).filter(k => !isNaN(k) && k > 0);
+                      if (startKms.length > 0) {
+                        initialKm = Math.min(...startKms).toString();
+                      }
+                      
                       const endKms = completedStates.map(s => Number(s.kmFinal)).filter(k => !isNaN(k) && k > 0);
                       if (endKms.length > 0) {
                         finalKm = Math.max(...endKms).toString();
                       }
+                    }
+                  }
+
+                  // 2. Se o KM inicial ainda for '0', tenta usar o do despacho original
+                  if (initialKm === '0' || !initialKm) {
+                    initialKm = originalShift.kmInicial?.toString() || '0';
+                  }
+
+                  // 3. Se ainda for '0', tenta usar o KM atual do veículo
+                  if (initialKm === '0' || !initialKm) {
+                    const plate = allocatedVehicle || originalShift.carroPlaca;
+                    if (plate) {
+                      const found = allActiveVehicles.find(v => v.placa === plate);
+                      if (found) initialKm = found.kmAtual?.toString() || '0';
                     }
                   }
 
