@@ -235,7 +235,12 @@ export const DriverHomeScreen = ({ navigation }: any) => {
     const data = primaryShift.data;
     
     const allPassengers: any[] = [];
+    const mergedGroupStates: { [key: string]: any } = {};
+
     pendingShifts.forEach(shift => {
+      if (shift.groupStates) {
+        Object.assign(mergedGroupStates, shift.groupStates);
+      }
       const isVolta = shift.destino?.toUpperCase().includes('JBS/CASA') || 
                       shift.destino?.toUpperCase().includes('JBSXCASA') ||
                       shift.destino?.toUpperCase().includes('JBS X CASA') ||
@@ -251,7 +256,8 @@ export const DriverHomeScreen = ({ navigation }: any) => {
             destinoTag: tag,
             destinoLabel: label,
             shiftId: shift.id,
-            shiftStatus: shift.status
+            shiftStatus: shift.status,
+            originalShift: shift
           });
         });
       }
@@ -274,7 +280,8 @@ export const DriverHomeScreen = ({ navigation }: any) => {
       carroPlaca,
       data,
       groupedPassengers,
-      originalShifts: pendingShifts
+      originalShifts: pendingShifts,
+      groupStates: mergedGroupStates
     };
   };
 
@@ -283,11 +290,31 @@ export const DriverHomeScreen = ({ navigation }: any) => {
     try {
       const db = getFirebaseDb();
       const horaAtual = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      await setDoc(doc(db, 'viagens', startingTrip.id), { 
-        status: 'active', 
-        horaInicio: horaAtual,
-        checklistRealizado: true
-      }, { merge: true });
+      
+      if (startingTrip.groupKey) {
+        const docRef = doc(db, 'viagens', startingTrip.id);
+        const currentGroupStates = startingTrip.groupStates || {};
+        
+        const updatedGroupStates = {
+          ...currentGroupStates,
+          [startingTrip.groupKey]: {
+            status: 'active',
+            horaInicio: horaAtual,
+            kmInicial: Number(startingTrip.kmInicial || 0)
+          }
+        };
+
+        await updateDoc(docRef, {
+          groupStates: updatedGroupStates,
+          status: 'active'
+        });
+      } else {
+        await setDoc(doc(db, 'viagens', startingTrip.id), { 
+          status: 'active', 
+          horaInicio: horaAtual,
+          checklistRealizado: true
+        }, { merge: true });
+      }
       setStartingTrip(null);
     } catch (e) {
       Alert.alert('Erro', 'Falha ao iniciar viagem. Verifique sua conexão.');
@@ -488,22 +515,6 @@ export const DriverHomeScreen = ({ navigation }: any) => {
 
               <View style={styles.divider} />
               <Text style={styles.passengersTitle}>CRONOGRAMA DE HOJE</Text>
-              
-              {Object.keys(consolidated.groupedPassengers).length > 0 && (
-                <TouchableOpacity 
-                  style={styles.multiRouteBtn} 
-                  onPress={() => {
-                    const flatSorted: any[] = [];
-                    Object.keys(consolidated.groupedPassengers).forEach(k => {
-                      flatSorted.push(...consolidated.groupedPassengers[k]);
-                    });
-                    openMultiStopRoute({ passageiros: flatSorted, destino: 'JBS Tatuí' });
-                  }}
-                >
-                  <MaterialCommunityIcons name="map-marker-multiple" size={20} color={colors.white} />
-                  <Text style={styles.multiRouteBtnText}>Iniciar Rota Completa (Multi-Paradas) 🗺️</Text>
-                </TouchableOpacity>
-              )}
 
               {Object.keys(consolidated.groupedPassengers).map((groupKey) => {
                 const group = consolidated.groupedPassengers[groupKey];
@@ -513,17 +524,27 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                 const tag = firstP.destinoTag;
                 const isVolta = tag === 'Volta';
                 
+                const groupState = consolidated.groupStates?.[groupKey] || { status: 'pending' };
+                const groupStatus = groupState.status || 'pending';
+                const isCompleted = groupStatus === 'completed';
+                const isActive = groupStatus === 'active';
+
+                const originalShift = firstP.originalShift;
+
                 return (
-                  <View key={groupKey} style={styles.passengerGroupCard}>
-                    <View style={[styles.passengerGroupHeader, { backgroundColor: isVolta ? '#F3F4F6' : '#FEE2E2' }]}>
+                  <View key={groupKey} style={[styles.passengerGroupCard, isCompleted && { opacity: 0.8, borderColor: colors.green }]}>
+                    <View style={[
+                      styles.passengerGroupHeader, 
+                      { backgroundColor: isCompleted ? '#E6F4EA' : isVolta ? '#F3F4F6' : '#FEE2E2' }
+                    ]}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         <MaterialCommunityIcons name="clock-outline" size={16} color={colors.graphite} />
                         <Text style={{ fontWeight: 'bold', color: colors.graphite, fontSize: 14 }}>{time}</Text>
                       </View>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <MaterialCommunityIcons name="swap-horizontal" size={16} color={isVolta ? colors.graphite : '#DF0A0A'} />
-                        <Text style={{ fontWeight: 'bold', color: isVolta ? colors.graphite : '#DF0A0A', fontSize: 12 }}>
-                          {direction}
+                        <MaterialCommunityIcons name="swap-horizontal" size={16} color={isCompleted ? colors.green : isVolta ? colors.graphite : '#DF0A0A'} />
+                        <Text style={{ fontWeight: 'bold', color: isCompleted ? colors.green : isVolta ? colors.graphite : '#DF0A0A', fontSize: 12 }}>
+                          {isCompleted ? 'REALIZADO ✅' : direction}
                         </Text>
                       </View>
                     </View>
@@ -548,34 +569,62 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                           ) : null}
                         </View>
                       ))}
-                    </View>
-                  </View>
-                );
-              })}
 
-              <View style={styles.divider} />
-              <Text style={styles.passengersTitle}>GERENCIAR VIAGENS</Text>
+                      {/* Botão de Rota Completa (Multi-Paradas) específico para este horário */}
+                      {!isCompleted && group.length > 0 && (
+                        <TouchableOpacity 
+                          style={styles.groupMultiRouteBtn} 
+                          onPress={() => openMultiStopRoute({ passageiros: group, destino: isVolta ? 'Destino Final' : 'JBS Tatuí' })}
+                        >
+                          <MaterialCommunityIcons name="map-marker-multiple" size={18} color={colors.white} />
+                          <Text style={styles.groupMultiRouteBtnText}>ROTA DO HORÁRIO 🗺️</Text>
+                        </TouchableOpacity>
+                      )}
 
-              {consolidated.originalShifts.map((shift) => {
-                const label = shift.destino?.toUpperCase().includes('JBS/CASA') ? 'Volta (JBS ➔ Casa)' : 'Ida (Casa ➔ JBS)';
-                const isActive = shift.status === 'active';
-                return (
-                  <View key={shift.id} style={styles.shiftActionCard}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.shiftActionLabel}>{label}</Text>
-                      <Text style={[styles.shiftStatusLabel, { color: isActive ? colors.green : colors.graphiteLight }]}>
-                        {isActive ? '● EM ANDAMENTO' : '○ PENDENTE'}
-                      </Text>
+                      {/* Botões de Iniciar/Finalizar para esta viagem (horário) em específico */}
+                      <View style={{ marginTop: 10 }}>
+                        {isCompleted ? (
+                          <View style={styles.completedInfoBox}>
+                            <MaterialCommunityIcons name="check-circle" size={16} color={colors.green} />
+                            <Text style={styles.completedInfoText}>
+                              Saída: {groupState.horaInicio}h | Chegada: {groupState.horaFim}h | KM: {groupState.kmInicial} ➔ {groupState.kmFinal}
+                            </Text>
+                          </View>
+                        ) : !isActive ? (
+                          <TouchableOpacity 
+                            style={styles.groupStartBtn} 
+                            onPress={() => {
+                              const plate = allocatedVehicle || originalShift.carroPlaca;
+                              let resolvedKm = '0';
+                              if (plate) {
+                                const found = allActiveVehicles.find(v => v.placa === plate);
+                                if (found) resolvedKm = found.kmAtual?.toString() || '0';
+                              }
+                              setStartingTrip({
+                                ...originalShift,
+                                groupKey,
+                                kmInicial: resolvedKm
+                              });
+                            }}
+                          >
+                            <Text style={styles.groupBtnText}>INICIAR VIAGEM ({time})</Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity 
+                            style={styles.groupEndBtn} 
+                            onPress={() => {
+                              setClosingTrip({
+                                ...originalShift,
+                                groupKey,
+                                kmInicial: groupState.kmInicial || originalShift.kmInicial
+                              });
+                            }}
+                          >
+                            <Text style={styles.groupBtnText}>FINALIZAR VIAGEM ({time})</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     </View>
-                    {shift.status === 'pending' ? (
-                      <TouchableOpacity style={styles.startBtnSmall} onPress={() => setStartingTrip(shift)}>
-                        <Text style={styles.btnTextSmall}>INICIAR</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity style={styles.endBtnSmall} onPress={() => setClosingTrip(shift)}>
-                        <Text style={styles.btnTextSmall}>FINALIZAR</Text>
-                      </TouchableOpacity>
-                    )}
                   </View>
                 );
               })}
@@ -1090,5 +1139,57 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: colors.white,
     textTransform: 'uppercase',
+  },
+  groupMultiRouteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#DF0A0A',
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 10,
+    gap: 6,
+  },
+  groupMultiRouteBtnText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  groupStartBtn: {
+    backgroundColor: colors.green,
+    paddingVertical: 12,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  groupEndBtn: {
+    backgroundColor: colors.red,
+    paddingVertical: 12,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  groupBtnText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  completedInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E6F4EA',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    padding: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  completedInfoText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#065F46',
+    flex: 1,
   }
 });

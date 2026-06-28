@@ -99,26 +99,76 @@ export const TripClosingModal = ({ visible, onClose, tripData }: Props) => {
       const db = getFirebaseDb();
       const horaFim = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       
-      await updateDoc(doc(db, 'viagens', tripData.id), {
-        status: 'completed',
-        horaFim,
-        kmInicial: Number(kmInicial),
-        kmFinal: Number(kmFinal),
-        totalKm: Number(kmFinal) - Number(kmInicial),
-        observacoes,
-        fotoUrl
-      });
+      if (tripData.groupKey) {
+        const docRef = doc(db, 'viagens', tripData.id);
+        const currentGroupStates = tripData.groupStates || {};
+        
+        const updatedGroupStates = {
+          ...currentGroupStates,
+          [tripData.groupKey]: {
+            status: 'completed',
+            horaInicio: currentGroupStates[tripData.groupKey]?.horaInicio || tripData.horaInicio || '',
+            horaFim,
+            kmInicial: Number(kmInicial),
+            kmFinal: Number(kmFinal)
+          }
+        };
 
-      // Sincronizar com a coleção 'trips' do painel administrativo
-      await addDoc(collection(db, 'trips'), {
-        driverId: tripData.motoristaId || tripData.motoristaNome || 'N/A',
-        status: 'completed',
-        closedAt: new Date(),
-        finalOdometer: Number(kmFinal),
-        notes: observacoes || '',
-        dashboardImageUrl: fotoUrl || '',
-        closingLocation: tripData.destino || 'Itapetininga, SP'
-      });
+        // Reconstruir chaves de grupos no documento original para saber se todos foram concluídos
+        const grouped: { [key: string]: any[] } = {};
+        tripData.passageiros?.forEach((p: any) => {
+          const time = p.horarioEntrada || '00:00';
+          const tag = p.destinoTag || (p.destinoLabel?.toUpperCase().includes('JBS/CASA') ? 'Volta' : 'Ida');
+          const dest = p.destinoLabel || (tag === 'Volta' ? 'JBS ➔ Casa' : 'Casa ➔ JBS');
+          const groupKey = `${time}_${tag}_${dest}`;
+          if (!grouped[groupKey]) grouped[groupKey] = [];
+          grouped[groupKey].push(p);
+        });
+
+        const allGroupsCompleted = Object.keys(grouped).every(k => {
+          if (k === tripData.groupKey) return true;
+          return currentGroupStates[k]?.status === 'completed';
+        });
+
+        await updateDoc(docRef, {
+          groupStates: updatedGroupStates,
+          status: allGroupsCompleted ? 'completed' : 'active'
+        });
+
+        // Registrar trecho individual no banco administrativo
+        const cleanLocation = tripData.groupKey.split('_')[2] || 'Itapetininga, SP';
+        await addDoc(collection(db, 'trips'), {
+          driverId: tripData.motoristaId || tripData.motoristaNome || 'N/A',
+          status: 'completed',
+          closedAt: new Date(),
+          finalOdometer: Number(kmFinal),
+          notes: `Horário ${tripData.groupKey.split('_')[0]} (${cleanLocation}) concluído. Obs: ${observacoes}`,
+          dashboardImageUrl: fotoUrl || '',
+          closingLocation: cleanLocation
+        });
+
+      } else {
+        // Lógica legada
+        await updateDoc(doc(db, 'viagens', tripData.id), {
+          status: 'completed',
+          horaFim,
+          kmInicial: Number(kmInicial),
+          kmFinal: Number(kmFinal),
+          totalKm: Number(kmFinal) - Number(kmInicial),
+          observacoes,
+          fotoUrl
+        });
+
+        await addDoc(collection(db, 'trips'), {
+          driverId: tripData.motoristaId || tripData.motoristaNome || 'N/A',
+          status: 'completed',
+          closedAt: new Date(),
+          finalOdometer: Number(kmFinal),
+          notes: observacoes || '',
+          dashboardImageUrl: fotoUrl || '',
+          closingLocation: tripData.destino || 'Itapetininga, SP'
+        });
+      }
 
       if (tripData.carroPlaca) {
         const q = query(collection(db, 'veiculos'), where('placa', '==', tripData.carroPlaca));
