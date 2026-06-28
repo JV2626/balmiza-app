@@ -28,6 +28,31 @@ export const AdminActiveTripsScreen = () => {
   const [editDate, setEditDate] = useState('');
   const [editPassengers, setEditPassengers] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
+  const [collapsedDrivers, setCollapsedDrivers] = useState<Record<string, boolean>>({});
+
+  const toggleCollapse = (driverId: string) => {
+    setCollapsedDrivers(prev => ({
+      ...prev,
+      [driverId]: !prev[driverId]
+    }));
+  };
+
+  const getGroupedSegments = (passageiros: any[]) => {
+    const groups: { [key: string]: { time: string; tag: string; list: any[] } } = {};
+    (passageiros || []).forEach(p => {
+      const tag = p.destinoTag || 'Ida';
+      const key = `${p.horarioEntrada}_${tag}`;
+      if (!groups[key]) {
+        groups[key] = {
+          time: p.horarioEntrada,
+          tag,
+          list: []
+        };
+      }
+      groups[key].list.push(p);
+    });
+    return Object.values(groups).sort((a, b) => a.time.localeCompare(b.time));
+  };
 
   // Custom Alert States
   const [alertVisible, setAlertVisible] = useState(false);
@@ -281,59 +306,130 @@ export const AdminActiveTripsScreen = () => {
             <Text style={styles.emptySub}>Todos os motoristas estão livres ou já encerraram.</Text>
           </View>
         ) : (
-          activeTrips.map((trip, index) => (
-            <AnimatedCard key={trip.id} style={styles.card} delay={Math.min(index * 70, 700)}>
-              <View style={styles.cardHeader}>
-                <View style={styles.statusBadgeContainer}>
-                  <View style={[styles.statusDot, { backgroundColor: trip.status === 'active' ? colors.green : colors.orange }]} />
-                  <Text style={[styles.statusText, { color: trip.status === 'active' ? colors.green : colors.orange }]}>
-                    {trip.status === 'active' ? 'EM ROTA' : 'PENDENTE'}
-                  </Text>
-                </View>
-                <Text style={styles.dateText}>{trip.data}</Text>
-              </View>
+          activeTrips.map((trip, index) => {
+            const isCollapsed = collapsedDrivers[trip.id] ?? false;
+            const groupedSegments = getGroupedSegments(trip.passageiros);
+            
+            return (
+              <AnimatedCard key={trip.id} style={styles.card} delay={Math.min(index * 70, 700)}>
+                <TouchableOpacity 
+                  activeOpacity={0.7} 
+                  onPress={() => toggleCollapse(trip.id)} 
+                  style={styles.cardHeaderInteractable}
+                >
+                  <View style={styles.cardHeader}>
+                    <View style={styles.statusBadgeContainer}>
+                      <View style={[styles.statusDot, { backgroundColor: trip.status === 'active' ? colors.green : colors.orange }]} />
+                      <Text style={[styles.statusText, { color: trip.status === 'active' ? colors.green : colors.orange }]}>
+                        {trip.status === 'active' ? 'EM ROTA' : 'PENDENTE'}
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <Text style={styles.dateText}>{trip.data}</Text>
+                      <MaterialCommunityIcons 
+                        name={isCollapsed ? "chevron-down" : "chevron-up"} 
+                        size={24} 
+                        color={colors.graphiteLight} 
+                      />
+                    </View>
+                  </View>
 
-              <View style={styles.infoRow}>
-                <MaterialCommunityIcons name="account-tie-hat" size={24} color={colors.graphite} />
-                <Text style={styles.infoText}>{trip.motoristaNome?.split('@')[0].toUpperCase()}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <MaterialCommunityIcons name="car" size={24} color={colors.graphite} />
-                <Text style={styles.infoText}>{trip.carroPlaca}</Text>
-              </View>
+                  <View style={styles.driverInfoBrief}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <MaterialCommunityIcons name="account-tie-hat" size={20} color={colors.graphite} />
+                      <Text style={styles.driverNameBrief}>{trip.motoristaNome?.split('@')[0].toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <MaterialCommunityIcons name="car" size={20} color={colors.graphite} />
+                      <Text style={styles.vehicleBrief}>{trip.carroPlaca}</Text>
+                    </View>
+                  </View>
 
-              {trip.horaInicio ? (
-                <View style={styles.infoRow}>
-                  <MaterialCommunityIcons name="clock-start" size={24} color={colors.green} />
-                  <Text style={styles.infoText}>Iniciou às: {trip.horaInicio}</Text>
-                </View>
-              ) : null}
-
-              <View style={styles.divider} />
-              <Text style={styles.passengersTitle}>{trip.passageiros?.length || 0} PASSAGEIRO(S)</Text>
-              {trip.passageiros?.map((p: any, idx: number) => {
-                const tag = p.destinoTag || 'Ida';
-                return (
-                  <Text key={idx} style={styles.passengerText}>
-                    • <Text style={{ color: '#DF0A0A' }}>{p.horarioEntrada}</Text>
-                    <Text style={{ color: '#6B7280', fontSize: 13, fontWeight: 'bold' }}> [{tag}]</Text> - {p.nome}
-                  </Text>
-                );
-              })}
-
-              <View style={styles.cardDivider} />
-              <View style={styles.actionRow}>
-                <TouchableOpacity style={styles.editBtn} onPress={() => handleOpenEditModal(trip)}>
-                  <MaterialCommunityIcons name="pencil" size={16} color={colors.white} />
-                  <Text style={styles.btnText}>Alterar</Text>
+                  {isCollapsed && (
+                    <View style={styles.summaryRow}>
+                      <MaterialCommunityIcons name="map-clock-outline" size={16} color={colors.graphiteLight} />
+                      <Text style={styles.summaryText}>
+                        {groupedSegments.length} Viagen(s) · {trip.passageiros?.length || 0} Passageiro(s)
+                      </Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteTrip(trip.tripIds)}>
-                  <MaterialCommunityIcons name="trash-can" size={16} color={colors.white} />
-                  <Text style={styles.btnText}>Excluir</Text>
-                </TouchableOpacity>
-              </View>
-            </AnimatedCard>
-          ))
+
+                {!isCollapsed && (
+                  <>
+                    {trip.horaInicio ? (
+                      <View style={[styles.infoRow, { marginTop: 10 }]}>
+                        <MaterialCommunityIcons name="clock-start" size={20} color={colors.green} />
+                        <Text style={styles.startedTimeText}>Iniciou às: {trip.horaInicio}</Text>
+                      </View>
+                    ) : null}
+
+                    <View style={styles.divider} />
+                    <Text style={styles.passengersTitle}>ROTEIROS PROGRAMADOS ({trip.passageiros?.length || 0})</Text>
+                    
+                    {groupedSegments.map((segment: any, sIdx: number) => {
+                      const isVolta = segment.tag === 'Volta';
+                      return (
+                        <View key={sIdx} style={styles.segmentCard}>
+                          <View style={styles.segmentHeader}>
+                            <View style={styles.segmentTimeBadge}>
+                              <MaterialCommunityIcons name="clock-outline" size={16} color="#DF0A0A" />
+                              <Text style={styles.segmentTimeText}>{segment.time}</Text>
+                            </View>
+                            
+                            <View style={[
+                              styles.directionBadge, 
+                              { backgroundColor: isVolta ? '#E6FFFA' : '#EBF8FF' }
+                            ]}>
+                              <Text style={[
+                                styles.directionText, 
+                                { color: isVolta ? '#319795' : '#2B6CB0' }
+                              ]}>
+                                {isVolta ? 'VOLTA (JBS ➔ CASA)' : 'IDA (CASA ➔ JBS)'}
+                              </Text>
+                            </View>
+
+                            <MaterialCommunityIcons 
+                              name={isVolta ? "logout" : "login"} 
+                              size={20} 
+                              color={isVolta ? '#319795' : '#2B6CB0'} 
+                              style={{ marginLeft: 'auto' }}
+                            />
+                          </View>
+
+                          <View style={styles.passengerList}>
+                            {segment.list.map((p: any, pIdx: number) => (
+                              <View key={pIdx} style={styles.passengerRow}>
+                                <MaterialCommunityIcons name="account" size={16} color={colors.graphiteLight} />
+                                <Text style={styles.passengerNameText}>{p.nome}</Text>
+                                {p.setor ? (
+                                  <View style={styles.sectorBadge}>
+                                    <Text style={styles.sectorText}>{p.setor}</Text>
+                                  </View>
+                                ) : null}
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      );
+                    })}
+
+                    <View style={styles.cardDivider} />
+                    <View style={styles.actionRow}>
+                      <TouchableOpacity style={styles.editBtn} onPress={() => handleOpenEditModal(trip)}>
+                        <MaterialCommunityIcons name="pencil" size={16} color={colors.white} />
+                        <Text style={styles.btnText}>Alterar</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteTrip(trip.tripIds)}>
+                        <MaterialCommunityIcons name="trash-can" size={16} color={colors.white} />
+                        <Text style={styles.btnText}>Excluir</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </AnimatedCard>
+            );
+          })
         )}
       </ScrollView>
 
@@ -483,6 +579,28 @@ const styles = StyleSheet.create({
   editBtn: { flex: 1, backgroundColor: colors.graphite, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 8, gap: 5 },
   deleteBtn: { flex: 1, backgroundColor: colors.red, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 8, gap: 5 },
   btnText: { color: colors.white, fontSize: 14, fontWeight: 'bold' },
+
+  // Estilos de Escalas Agrupadas & Sanfona (Accordion)
+  cardHeaderInteractable: { width: '100%' },
+  driverInfoBrief: { flexDirection: 'row', gap: 20, marginTop: 12 },
+  driverNameBrief: { fontSize: 16, fontWeight: '900', color: colors.graphite },
+  vehicleBrief: { fontSize: 16, fontWeight: 'bold', color: colors.graphiteLight },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, backgroundColor: '#F9FAFB', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
+  summaryText: { fontSize: 13, fontWeight: '700', color: colors.graphiteLight },
+  startedTimeText: { fontSize: 14, fontWeight: 'bold', color: colors.green },
+
+  // Roteiros (Mini-cards por horário)
+  segmentCard: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 12, marginBottom: 10, elevation: 1 },
+  segmentHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingBottom: 8, marginBottom: 10 },
+  segmentTimeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFF5F5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  segmentTimeText: { fontSize: 14, fontWeight: '900', color: '#DF0A0A' },
+  directionBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  directionText: { fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  passengerList: { gap: 8 },
+  passengerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  passengerNameText: { fontSize: 15, fontWeight: '600', color: colors.graphite },
+  sectorBadge: { backgroundColor: '#E2E8F0', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  sectorText: { fontSize: 10, fontWeight: 'bold', color: '#4A5568' },
 
   // Modal styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
