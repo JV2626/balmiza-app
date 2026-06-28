@@ -2,7 +2,12 @@ import { Platform } from 'react-native';
 import { GoogleGenAI } from '@google/genai';
 import { getFirebaseAuth } from '../config/firebase';
 
-export const callGeminiSecurely = async (prompt: string, base64Image?: string, mimeType?: string): Promise<string> => {
+export const callGeminiSecurely = async (
+  prompt: string, 
+  base64Image?: string, 
+  mimeType?: string,
+  schema?: any
+): Promise<string> => {
   const localApiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 
   // Se estiver rodando localmente em modo desenvolvimento e tiver chave local no .env, faz chamada direta no cliente
@@ -19,9 +24,16 @@ export const callGeminiSecurely = async (prompt: string, base64Image?: string, m
         });
       }
 
+      const config: any = {};
+      if (schema) {
+        config.responseMimeType = 'application/json';
+        config.responseSchema = schema;
+      }
+
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: [{ role: 'user', parts }]
+        contents: [{ role: 'user', parts }],
+        config: config
       });
 
       return response.text || '';
@@ -52,7 +64,7 @@ export const callGeminiSecurely = async (prompt: string, base64Image?: string, m
       'Content-Type': 'application/json',
       'Authorization': idToken ? `Bearer ${idToken}` : ''
     },
-    body: JSON.stringify({ prompt, base64Image, mimeType })
+    body: JSON.stringify({ prompt, base64Image, mimeType, schema })
   });
 
   if (!response.ok) {

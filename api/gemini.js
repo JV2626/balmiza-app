@@ -114,7 +114,7 @@ module.exports = async function handler(req, res) {
     return res.status(403).json({ error: `Acesso negado. Erro de autenticação: ${verification.error}` });
   }
 
-  const { prompt, base64Image, mimeType } = req.body;
+  const { prompt, base64Image, mimeType, schema } = req.body;
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
@@ -134,9 +134,16 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    const config = {};
+    if (schema) {
+      config.responseMimeType = 'application/json';
+      config.responseSchema = schema;
+    }
+
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: [{ role: 'user', parts }]
+      contents: [{ role: 'user', parts }],
+      config: config
     });
 
     return res.status(200).json({ text: response.text });

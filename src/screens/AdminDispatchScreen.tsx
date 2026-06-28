@@ -438,7 +438,66 @@ export const AdminDispatchScreen = () => {
         }
       `;
 
-      const responseText = await callGeminiSecurely(`${systemPrompt}\n\nInstrução do Usuário:\n"${aiDraftText}"`);
+      const dispatchSchema = {
+        type: 'object',
+        properties: {
+          isMulti: { type: 'boolean' },
+          data: { type: 'string', description: 'Data da viagem (DD/MM/AAAA)' },
+          destino: { type: 'string', description: 'Destino ou sentido da viagem (ex: CASA/JBS ou JBS/CASA)' },
+          motoristaEmail: { type: 'string', description: 'E-mail do motorista se for um motorista' },
+          carroPlaca: { type: 'string', description: 'Placa do veículo' },
+          scales: {
+            type: 'array',
+            description: 'Lista de escalas se for múltiplos motoristas (isMulti = true)',
+            items: {
+              type: 'object',
+              properties: {
+                motoristaNome: { type: 'string' },
+                motoristaEmail: { type: 'string' },
+                carroPlaca: { type: 'string' },
+                data: { type: 'string' },
+                destino: { type: 'string' },
+                paradas: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      nome: { type: 'string' },
+                      setor: { type: 'string' },
+                      horarioEntrada: { type: 'string' },
+                      horarioSaida: { type: 'string' }
+                    },
+                    required: ['nome']
+                  }
+                }
+              },
+              required: ['motoristaNome', 'paradas']
+            }
+          },
+          paradas: {
+            type: 'array',
+            description: 'Lista de paradas se for um único motorista (isMulti = false)',
+            items: {
+              type: 'object',
+              properties: {
+                nome: { type: 'string' },
+                setor: { type: 'string' },
+                horarioEntrada: { type: 'string' },
+                horarioSaida: { type: 'string' }
+              },
+              required: ['nome']
+            }
+          }
+        },
+        required: ['isMulti']
+      };
+
+      const responseText = await callGeminiSecurely(
+        `${systemPrompt}\n\nInstrução do Usuário:\n"${aiDraftText}"`,
+        undefined,
+        undefined,
+        dispatchSchema
+      );
       
       let jsonText = responseText.trim();
       const firstCurly = jsonText.indexOf('{');
