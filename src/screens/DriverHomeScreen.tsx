@@ -757,10 +757,40 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                             onPress={() => {
                               const plate = allocatedVehicle || originalShift.carroPlaca;
                               let resolvedKm = '0';
-                              if (plate) {
-                                const found = allActiveVehicles.find(v => v.placa === plate);
-                                if (found) resolvedKm = found.kmAtual?.toString() || '0';
+                              
+                              // 1. Tenta achar o maior KM final entre os trechos já concluídos hoje (online/offline)
+                              const allShiftsToday = [...pendingShifts, ...filteredCompletedTripsToday];
+                              let maxCompletedKm = 0;
+                              allShiftsToday.forEach(s => {
+                                if (s.status === 'completed' && s.kmFinal) {
+                                  const val = Number(s.kmFinal);
+                                  if (!isNaN(val) && val > maxCompletedKm) maxCompletedKm = val;
+                                }
+                                if (s.groupStates) {
+                                  Object.values(s.groupStates).forEach((gs: any) => {
+                                    if (gs.status === 'completed' && gs.kmFinal) {
+                                      const val = Number(gs.kmFinal);
+                                      if (!isNaN(val) && val > maxCompletedKm) maxCompletedKm = val;
+                                    }
+                                  });
+                                }
+                              });
+
+                              if (maxCompletedKm > 0) {
+                                resolvedKm = maxCompletedKm.toString();
+                              } else {
+                                // 2. Fallback: usar o kmAtual do veículo no Firestore
+                                if (plate) {
+                                  const found = allActiveVehicles.find(v => v.placa === plate);
+                                  if (found) resolvedKm = found.kmAtual?.toString() || '0';
+                                }
                               }
+
+                              // 3. Fallback final: usar o KM inicial do despacho original
+                              if (resolvedKm === '0' || !resolvedKm) {
+                                resolvedKm = originalShift.kmInicial?.toString() || '0';
+                              }
+
                               setStartingTrip({
                                 ...originalShift,
                                 groupKey,
