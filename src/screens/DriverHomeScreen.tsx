@@ -63,6 +63,78 @@ export const DriverHomeScreen = ({ navigation }: any) => {
     return completedTripsToday.filter(t => allowedDates.includes(t.data));
   }, [completedTripsToday, pendingShifts]);
 
+  // Organiza e desmembra os trechos concluídos de escalas normais e viagens extras para exibição na planilha digital
+  const tableRows = React.useMemo(() => {
+    const rows: any[] = [];
+    
+    filteredCompletedTripsToday.forEach((t) => {
+      // Se for uma escala normal e tiver groupStates, nós desmembramos por trecho concluído
+      if (!t.isExtra && t.groupStates) {
+        const groupedPassengers: { [key: string]: any[] } = {};
+        if (t.passageiros) {
+          t.passageiros.forEach((p: any) => {
+            const time = p.horarioEntrada || '00:00';
+            const dest = p.destino || 'JBS';
+            const isVolta = p.tipo === 'Volta' || p.isVolta === true || p.setor === 'PEGAR AMOSTRAS';
+            const tag = isVolta ? 'Volta' : 'Ida';
+            const key = `${time}_${dest}_${tag}`;
+            if (!groupedPassengers[key]) {
+              groupedPassengers[key] = [];
+            }
+            groupedPassengers[key].push(p);
+          });
+        }
+
+        Object.keys(t.groupStates).forEach((groupKey) => {
+          const gs = t.groupStates[groupKey];
+          // Um trecho é considerado concluído se o status dele for concluído ou se a escala mãe como um todo já foi finalizada
+          const isCompletedSegment = gs.status === 'completed' || t.status === 'completed';
+          
+          if (isCompletedSegment) {
+            const groupPass = groupedPassengers[groupKey] || [];
+            const passNames = groupPass.map((p: any) => p.nome).join(', ') || 'N/A';
+            const firstP = groupPass[0];
+            
+            const time = groupKey.split('_')[0];
+            const dest = groupKey.split('_')[1];
+            const tag = groupKey.split('_')[2];
+            const friendlyDest = tag === 'Volta' ? 'CASA' : dest;
+
+            rows.push({
+              id: `${t.id}_${groupKey}`,
+              passNames,
+              destino: friendlyDest,
+              horaInicio: gs.horaInicio || t.horaInicio || '-',
+              horaFim: gs.horaFim || t.horaFim || '-',
+              kmInicial: gs.kmInicial || t.kmInicial || '-',
+              kmFinal: gs.kmFinal || t.kmFinal || '-',
+              isExtra: false,
+              displayType: 'NORMAL'
+            });
+          }
+        });
+      } else {
+        // Viagem Extra ou legado simples
+        const passNames = t.passageiros?.map((p: any) => p.nome).join(', ') || 'N/A';
+        rows.push({
+          id: t.id,
+          passNames,
+          destino: t.destino || 'N/A',
+          horaInicio: t.horaInicio || '-',
+          horaFim: t.horaFim || '-',
+          kmInicial: t.kmInicial || '-',
+          kmFinal: t.kmFinal || '-',
+          isExtra: t.isExtra === true,
+          displayType: t.isExtra === true ? 'EXTRA' : 'NORMAL'
+        });
+      }
+    });
+
+    // Ordena pela hora de saída/início cronologicamente
+    rows.sort((a, b) => (a.horaInicio || '').localeCompare(b.horaInicio || ''));
+    return rows;
+  }, [filteredCompletedTripsToday]);
+
   const [showExtraModal, setShowExtraModal] = useState(false);
   const [extraPassageiros, setExtraPassageiros] = useState('');
   const [extraDestino, setExtraDestino] = useState('CASA/JBS');
@@ -531,36 +603,35 @@ export const DriverHomeScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
 
-          {filteredCompletedTripsToday.length === 0 ? (
+          {tableRows.length === 0 ? (
             <Text style={styles.emptySheetText}>Nenhuma viagem registrada hoje ainda.</Text>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={styles.table}>
                 {/* Header Row */}
                 <View style={styles.tableRowHeader}>
-                  <Text style={[styles.tableCellHeader, { width: 120 }]}>Passageiros</Text>
-                  <Text style={[styles.tableCellHeader, { width: 100 }]}>Destino</Text>
-                  <Text style={[styles.tableCellHeader, { width: 70 }]}>Saída</Text>
-                  <Text style={[styles.tableCellHeader, { width: 70 }]}>Chegada</Text>
-                  <Text style={[styles.tableCellHeader, { width: 80 }]}>KM Inicial</Text>
-                  <Text style={[styles.tableCellHeader, { width: 80 }]}>KM Final</Text>
-                  <Text style={[styles.tableCellHeader, { width: 60 }]}>Tipo</Text>
+                  <Text style={[styles.tableCellHeader, { width: 120 }]} {...(Platform.OS === 'web' ? { translate: 'no', className: 'notranslate' } : {})}>Passageiros</Text>
+                  <Text style={[styles.tableCellHeader, { width: 100 }]} {...(Platform.OS === 'web' ? { translate: 'no', className: 'notranslate' } : {})}>Destino</Text>
+                  <Text style={[styles.tableCellHeader, { width: 70 }]} {...(Platform.OS === 'web' ? { translate: 'no', className: 'notranslate' } : {})}>Saída</Text>
+                  <Text style={[styles.tableCellHeader, { width: 70 }]} {...(Platform.OS === 'web' ? { translate: 'no', className: 'notranslate' } : {})}>Chegada</Text>
+                  <Text style={[styles.tableCellHeader, { width: 80 }]} {...(Platform.OS === 'web' ? { translate: 'no', className: 'notranslate' } : {})}>KM Inicial</Text>
+                  <Text style={[styles.tableCellHeader, { width: 80 }]} {...(Platform.OS === 'web' ? { translate: 'no', className: 'notranslate' } : {})}>KM Final</Text>
+                  <Text style={[styles.tableCellHeader, { width: 60 }]} {...(Platform.OS === 'web' ? { translate: 'no', className: 'notranslate' } : {})}>Tipo</Text>
                 </View>
 
                 {/* Data Rows */}
-                {filteredCompletedTripsToday.map((t, idx) => {
-                  const passNames = t.passageiros?.map((p: any) => p.nome).join(', ') || 'N/A';
-                  const isExt = t.isExtra === true;
+                {tableRows.map((row, idx) => {
+                  const isExt = row.isExtra === true;
                   return (
-                    <View key={t.id} style={[styles.tableRow, idx % 2 === 1 && { backgroundColor: '#F9FAFB' }]}>
-                      <Text style={[styles.tableCell, { width: 120 }]} numberOfLines={1}>{passNames}</Text>
-                      <Text style={[styles.tableCell, { width: 100 }]} numberOfLines={1}>{t.destino}</Text>
-                      <Text style={[styles.tableCell, { width: 70 }]}>{t.horaInicio || '-'}</Text>
-                      <Text style={[styles.tableCell, { width: 70 }]}>{t.horaFim || '-'}</Text>
-                      <Text style={[styles.tableCell, { width: 80 }]}>{t.kmInicial || '-'}</Text>
-                      <Text style={[styles.tableCell, { width: 80 }]}>{t.kmFinal || '-'}</Text>
+                    <View key={row.id} style={[styles.tableRow, idx % 2 === 1 && { backgroundColor: '#F9FAFB' }]}>
+                      <Text style={[styles.tableCell, { width: 120 }]} numberOfLines={1}>{row.passNames}</Text>
+                      <Text style={[styles.tableCell, { width: 100 }]} numberOfLines={1}>{row.destino}</Text>
+                      <Text style={[styles.tableCell, { width: 70 }]}>{row.horaInicio || '-'}</Text>
+                      <Text style={[styles.tableCell, { width: 70 }]}>{row.horaFim || '-'}</Text>
+                      <Text style={[styles.tableCell, { width: 80 }]}>{row.kmInicial || '-'}</Text>
+                      <Text style={[styles.tableCell, { width: 80 }]}>{row.kmFinal || '-'}</Text>
                       <Text style={[styles.tableCell, { width: 60, fontWeight: 'bold', color: isExt ? '#DF0A0A' : colors.green }]}>
-                        {isExt ? 'EXTRA' : 'NORMAL'}
+                        {row.displayType}
                       </Text>
                     </View>
                   );
