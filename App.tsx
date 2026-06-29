@@ -16,6 +16,7 @@ import { TeamManagementScreen } from './src/screens/TeamManagementScreen';
 import { FavoriteLocationsScreen } from './src/screens/FavoriteLocationsScreen';
 import { EmployeesManagementScreen } from './src/screens/EmployeesManagementScreen';
 import { TripsHistoryScreen } from './src/screens/TripsHistoryScreen';
+import { DriverHistoryScreen } from './src/screens/DriverHistoryScreen';
 import { colors } from './src/theme/colors';
 import { getFirebaseAuth, getFirebaseDb } from './src/config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -93,6 +94,7 @@ export default function App() {
         <Stack.Screen name="EmployeesManagement" component={EmployeesManagementScreen} options={{ headerShown: false }} />
         <Stack.Screen name="FavoriteLocations" component={FavoriteLocationsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="TripsHistory" component={TripsHistoryScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="DriverHistory" component={DriverHistoryScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
