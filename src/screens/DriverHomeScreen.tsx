@@ -704,21 +704,34 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                   let initialKm = '0';
                   let finalKm = '';
 
-                  // 1. Tentar pegar o menor KM inicial entre as viagens concluídas do dia (que seja > 0)
-                  if (consolidated.groupStates) {
-                    const states = Object.values(consolidated.groupStates) as any[];
-                    const completedStates = states.filter(s => s.status === 'completed');
+                  // Combina escalas pendentes/ativas e concluídas de hoje para obter a quilometragem real total
+                  const allShiftsToday = [...pendingShifts, ...completedTripsToday];
+                  const allGroupStates: any[] = [];
+
+                  allShiftsToday.forEach(s => {
+                    // Se a escala inteira foi concluída
+                    if (s.status === 'completed' && s.kmInicial && s.kmFinal) {
+                      allGroupStates.push({ kmInicial: s.kmInicial, kmFinal: s.kmFinal });
+                    }
+                    // Trechos individuais concluídos dentro dos groupStates
+                    if (s.groupStates) {
+                      Object.values(s.groupStates).forEach((gs: any) => {
+                        if (gs.status === 'completed') {
+                          allGroupStates.push(gs);
+                        }
+                      });
+                    }
+                  });
+
+                  if (allGroupStates.length > 0) {
+                    const startKms = allGroupStates.map(s => Number(s.kmInicial)).filter(k => !isNaN(k) && k > 0);
+                    if (startKms.length > 0) {
+                      initialKm = Math.min(...startKms).toString();
+                    }
                     
-                    if (completedStates.length > 0) {
-                      const startKms = completedStates.map(s => Number(s.kmInicial)).filter(k => !isNaN(k) && k > 0);
-                      if (startKms.length > 0) {
-                        initialKm = Math.min(...startKms).toString();
-                      }
-                      
-                      const endKms = completedStates.map(s => Number(s.kmFinal)).filter(k => !isNaN(k) && k > 0);
-                      if (endKms.length > 0) {
-                        finalKm = Math.max(...endKms).toString();
-                      }
+                    const endKms = allGroupStates.map(s => Number(s.kmFinal)).filter(k => !isNaN(k) && k > 0);
+                    if (endKms.length > 0) {
+                      finalKm = Math.max(...endKms).toString();
                     }
                   }
 
