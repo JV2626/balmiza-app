@@ -170,13 +170,17 @@ export function DriverHistoryScreen({ navigation }: any) {
               if (!t.isExtra && t.groupStates) {
                 // Escala normal com trechos
                 const groupedPassengers: { [key: string]: any[] } = {};
+                const isVolta = t.destino?.toUpperCase().includes('JBS/CASA') || 
+                                t.destino?.toUpperCase().includes('JBSXCASA') ||
+                                t.destino?.toUpperCase().includes('JBS X CASA') ||
+                                t.destino?.toUpperCase().includes('JBS-CASA') ||
+                                t.destino?.toUpperCase().includes('JBS > CASA');
+                const label = isVolta ? 'JBS ➔ CASA' : 'CASA ➔ JBS';
+
                 if (t.passageiros) {
                   t.passageiros.forEach((p: any) => {
                     const time = p.horarioEntrada || '00:00';
-                    const dest = p.destino || 'JBS';
-                    const isVolta = p.tipo === 'Volta' || p.isVolta === true || p.setor === 'PEGAR AMOSTRAS';
-                    const tag = isVolta ? 'Volta' : 'Ida';
-                    const key = `${time}_${dest}_${tag}`;
+                    const key = `${time}_${label}`;
                     if (!groupedPassengers[key]) {
                       groupedPassengers[key] = [];
                     }
@@ -191,17 +195,14 @@ export function DriverHistoryScreen({ navigation }: any) {
                   if (isCompletedSegment) {
                     const groupPass = groupedPassengers[groupKey] || [];
                     const passNames = groupPass.map((p: any) => p.nome).join(', ') || 'N/A';
-                    const firstP = groupPass[0];
-
+                    
                     const time = groupKey.split('_')[0];
-                    const dest = groupKey.split('_')[1];
-                    const tag = groupKey.split('_')[2];
-                    const friendlyDest = tag === 'Volta' ? 'CASA' : dest;
+                    const destLabel = groupKey.split('_')[1]; // Ex: "CASA ➔ JBS" ou "JBS ➔ CASA"
 
                     segments.push({
                       id: `${t.id}_${groupKey}`,
                       passNames,
-                      destino: friendlyDest,
+                      destino: destLabel,
                       horaInicio: gs.horaInicio || t.horaInicio || '-',
                       horaFim: gs.horaFim || t.horaFim || '-',
                       kmInicial: gs.kmInicial || t.kmInicial || '-',
