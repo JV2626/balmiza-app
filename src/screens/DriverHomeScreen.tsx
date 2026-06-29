@@ -49,6 +49,20 @@ export const DriverHomeScreen = ({ navigation }: any) => {
 
   // Planilha digital e viagem extra
   const [completedTripsToday, setCompletedTripsToday] = useState<any[]>([]);
+
+  const filteredCompletedTripsToday = React.useMemo(() => {
+    const pendingDates = pendingShifts.map(s => s.data);
+    const today = new Date();
+    const last3Days = [0, 1, 2].map(days => {
+      const d = new Date();
+      d.setDate(today.getDate() - days);
+      return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    });
+
+    const allowedDates = [...last3Days, ...pendingDates];
+    return completedTripsToday.filter(t => allowedDates.includes(t.data));
+  }, [completedTripsToday, pendingShifts]);
+
   const [showExtraModal, setShowExtraModal] = useState(false);
   const [extraPassageiros, setExtraPassageiros] = useState('');
   const [extraDestino, setExtraDestino] = useState('CASA/JBS');
@@ -108,13 +122,9 @@ export const DriverHomeScreen = ({ navigation }: any) => {
       setLoading(false);
     });
 
-    const today = new Date();
-    const formattedToday = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
-
     const qCompleted = query(
       collection(db, 'viagens'),
       where('motoristaId', '==', email.toLowerCase()),
-      where('data', '==', formattedToday),
       where('status', '==', 'completed')
     );
     
@@ -521,7 +531,7 @@ export const DriverHomeScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
 
-          {completedTripsToday.length === 0 ? (
+          {filteredCompletedTripsToday.length === 0 ? (
             <Text style={styles.emptySheetText}>Nenhuma viagem registrada hoje ainda.</Text>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -538,7 +548,7 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                 </View>
 
                 {/* Data Rows */}
-                {completedTripsToday.map((t, idx) => {
+                {filteredCompletedTripsToday.map((t, idx) => {
                   const passNames = t.passageiros?.map((p: any) => p.nome).join(', ') || 'N/A';
                   const isExt = t.isExtra === true;
                   return (
@@ -705,7 +715,7 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                   let finalKm = '';
 
                   // Combina escalas pendentes/ativas e concluídas de hoje para obter a quilometragem real total
-                  const allShiftsToday = [...pendingShifts, ...completedTripsToday];
+                  const allShiftsToday = [...pendingShifts, ...filteredCompletedTripsToday];
                   const allGroupStates: any[] = [];
 
                   allShiftsToday.forEach(s => {
