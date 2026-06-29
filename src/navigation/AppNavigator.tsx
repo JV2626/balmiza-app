@@ -12,6 +12,7 @@ import { AdminTabNavigator } from '../screens/Admin/AdminTabNavigator';
 import { DamageReportScreen } from '../screens/DamageReportScreen';
 import { FavoriteLocationsScreen } from '../screens/FavoriteLocationsScreen';
 import { EmployeesManagementScreen } from '../screens/EmployeesManagementScreen';
+import { DriverHistoryScreen } from '../screens/DriverHistoryScreen';
 
 import { getFirebaseAuth, getFirebaseDb } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -122,6 +123,7 @@ export function AppNavigator() {
           <>
             <Stack.Screen name="Home" component={DriverHomeScreen} />
             <Stack.Screen name="DamageReport" component={DamageReportScreen} />
+            <Stack.Screen name="DriverHistory" component={DriverHistoryScreen} />
           </>
         )}
       </Stack.Navigator>

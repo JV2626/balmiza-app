@@ -12,9 +12,10 @@ interface DriverSettingsModalProps {
   visible: boolean;
   onClose: () => void;
   driverEmail: string;
+  navigation: any;
 }
 
-export const DriverSettingsModal = ({ visible, onClose, driverEmail }: DriverSettingsModalProps) => {
+export const DriverSettingsModal = ({ visible, onClose, driverEmail, navigation }: DriverSettingsModalProps) => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [checkingPermission, setCheckingPermission] = useState(true);
   const [testing, setTesting] = useState(false);
@@ -210,6 +211,28 @@ export const DriverSettingsModal = ({ visible, onClose, driverEmail }: DriverSet
             </View>
           )}
 
+          {/* Card: Histórico de Viagens */}
+          <TouchableOpacity 
+            style={[styles.card, styles.historyCard]} 
+            onPress={() => {
+              onClose();
+              navigation.navigate('DriverHistory');
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={styles.historyIconContainer}>
+                <MaterialCommunityIcons name="history" size={24} color="#DF0A0A" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.historyCardTitle}>HISTÓRICO DE VIAGENS</Text>
+                <Text style={styles.historyCardDesc}>
+                  Consulte suas viagens passadas, carros dirigidos e dados registrados.
+                </Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#6B7280" />
+            </View>
+          </TouchableOpacity>
+
           {/* Card: Perfil e Veículo */}
           <View style={styles.card}>
             <Text style={styles.cardLabel}>DADOS DO MOTORISTA</Text>
@@ -329,4 +352,12 @@ const styles = StyleSheet.create({
   iosTipTitle: { fontSize: 15, fontWeight: '900', color: '#1C1C1E' },
   iosTipText: { fontSize: 13, color: '#4B5563', lineHeight: 18, marginBottom: 8 },
   iosStep: { fontSize: 13, color: '#4B5563', lineHeight: 18, marginLeft: 8, marginTop: 4 },
+  historyCard: { borderColor: '#FED7D7', backgroundColor: '#FFFDFD' },
+  historyIconContainer: {
+    width: 40, height: 40, borderRadius: 10,
+    backgroundColor: '#FFF5F5',
+    justifyContent: 'center', alignItems: 'center'
+  },
+  historyCardTitle: { fontSize: 14, fontWeight: '900', color: '#1C1C1E', letterSpacing: 0.5 },
+  historyCardDesc: { fontSize: 12, color: '#6B7280', marginTop: 2, lineHeight: 16 }
 });

@@ -908,6 +908,7 @@ export const DriverHomeScreen = ({ navigation }: any) => {
         visible={showSettings}
         onClose={() => setShowSettings(false)}
         driverEmail={driverEmail}
+        navigation={navigation}
       />
 
 
