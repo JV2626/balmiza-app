@@ -575,12 +575,17 @@ export const DriverHomeScreen = ({ navigation }: any) => {
 
         <TouchableOpacity style={styles.damageBtn} onPress={() => navigation.navigate('DamageReport')}>
           <MaterialCommunityIcons name="car-wrench" size={24} color={colors.graphite} />
-          <Text style={styles.damageBtnText}>RELATAR PROBLEMA NO CARRO</Text>
+          <Text style={styles.damageBtnText} {...(Platform.OS === 'web' ? { translate: 'no', className: 'notranslate' } : {})}>RELATAR PROBLEMA NO CARRO</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.damageBtn, { borderColor: colors.green }]} onPress={() => setShowReembolso(true)}>
           <MaterialCommunityIcons name="cash-multiple" size={24} color={colors.green} />
-          <Text style={[styles.damageBtnText, { color: colors.green }]}>SOLICITAR REEMBOLSO</Text>
+          <Text style={[styles.damageBtnText, { color: colors.green }]} {...(Platform.OS === 'web' ? { translate: 'no', className: 'notranslate' } : {})}>SOLICITAR REEMBOLSO</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.damageBtn, { borderColor: colors.red }]} onPress={() => navigation.navigate('DriverHistory')}>
+          <MaterialCommunityIcons name="history" size={24} color={colors.red} />
+          <Text style={[styles.damageBtnText, { color: colors.red }]} {...(Platform.OS === 'web' ? { translate: 'no', className: 'notranslate' } : {})}>HISTÓRICO DE VIAGENS</Text>
         </TouchableOpacity>
 
         {/* TABELA DE VIAGENS DE HOJE (PLANILHA DIGITAL) */}
