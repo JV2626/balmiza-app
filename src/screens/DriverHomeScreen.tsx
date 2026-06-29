@@ -583,7 +583,18 @@ export const DriverHomeScreen = ({ navigation }: any) => {
           <Text style={[styles.damageBtnText, { color: colors.green }]} {...(Platform.OS === 'web' ? { translate: 'no', className: 'notranslate' } : {})}>SOLICITAR REEMBOLSO</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.damageBtn, { borderColor: colors.red }]} onPress={() => navigation.navigate('DriverHistory')}>
+        <TouchableOpacity 
+          style={[styles.damageBtn, { borderColor: colors.red }]} 
+          onPress={() => {
+            console.log('Botão Histórico pressionado.');
+            try {
+              navigation.navigate('DriverHistory');
+            } catch (err: any) {
+              console.error('Erro na navegação:', err);
+              Alert.alert('Erro de Navegação', err?.message || 'Não foi possível navegar para o histórico.');
+            }
+          }}
+        >
           <MaterialCommunityIcons name="history" size={24} color={colors.red} />
           <Text style={[styles.damageBtnText, { color: colors.red }]} {...(Platform.OS === 'web' ? { translate: 'no', className: 'notranslate' } : {})}>HISTÓRICO DE VIAGENS</Text>
         </TouchableOpacity>
