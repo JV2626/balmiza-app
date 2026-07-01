@@ -407,7 +407,7 @@ export const AdminDispatchScreen = () => {
 
         REGRAS CRÍTICAS DE EXTRAÇÃO:
         1. **Divisão de Múltiplas Viagens**: Se um mesmo motorista possui múltiplos horários de viagem ou diferentes destinos no texto (ex: Regis tem viagens às 05:00, 05:40, 17:00, etc.), você DEVE criar **um item separado** no array "scales" para cada uma dessas viagens dele! NUNCA junte viagens de horários ou destinos diferentes de um mesmo motorista em uma única escala. Se ele fizer 6 viagens, devem existir 6 itens no array "scales".
-        2. **Destino Exato**: O campo "destino" deve ser preenchido exatamente como "CASA/JBS" (se for sentido Casa para o trabalho/JBS) ou "JBS/CASA" (se for sentido Trabalho/JBS de volta para Casa). Use exatamente uma destas duas strings no formato maiúsculo.
+        2. **Destino Exato**: O campo "destino" deve ser preenchido EXATAMENTE como aparece no texto original, em maiúsculas, usando "/" como separador de origem e destino (ex: "CASA/JBS", "JBS/CASA", "CAMI/JBS", "JBS/COLONIAL FLAT", "COLONIAL FLAT/UNIMED VIRGÍLIO", "JBS/LABOR. PAULISTA", "UNIMED VIRGÍLIO/JBS", "AMPARO", etc.). NUNCA simplifique ou altere o destino para CASA/JBS ou JBS/CASA se o texto original indicar um local diferente. Preservar o local exato é fundamental para o controle de rotas.
         3. **Horários nas Paradas**: Para cada parada ("paradas"), o "horarioEntrada" deve ser o horário exato daquela viagem específica (ex: "05:00" para a viagem das 05:00h, "17:50" para a viagem das 17:50h). O "horarioSaida" deve ser 10 minutos após o entrada (ex: "05:10" ou "18:00"). Nunca retorne horários genéricos como "08:00".
 
         Se o texto contiver escalas de múltiplos motoristas (como Regis, Thiago, Bruno, Moisés, etc.), retorne no formato:
@@ -419,7 +419,7 @@ export const AdminDispatchScreen = () => {
               "motoristaEmail": "Email correspondente encontrado na lista de motoristas, ou string vazia",
               "carroPlaca": "Placa do veículo correspondente encontrado na lista de veículos, ou string vazia",
               "data": "DD/MM/AAAA",
-              "destino": "CASA/JBS ou JBS/CASA",
+              "destino": "Destino exato como no texto (ex: CASA/JBS, JBS/CASA, CAMI/JBS, JBS/COLONIAL FLAT, AMPARO)",
               "paradas": [
                 {
                   "nome": "Nome exato da pessoa ou local citado no texto",
@@ -436,7 +436,7 @@ export const AdminDispatchScreen = () => {
         {
           "isMulti": false,
           "data": "DD/MM/AAAA",
-          "destino": "CASA/JBS ou JBS/CASA",
+          "destino": "Destino exato como no texto (ex: CASA/JBS, JBS/CASA, CAMI/JBS, AMPARO)",
           "motoristaEmail": "Email correspondente",
           "carroPlaca": "Placa correspondente",
           "paradas": [

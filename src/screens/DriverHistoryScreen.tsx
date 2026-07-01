@@ -170,12 +170,9 @@ export function DriverHistoryScreen({ navigation }: any) {
               if (!t.isExtra && t.groupStates) {
                 // Escala normal com trechos
                 const groupedPassengers: { [key: string]: any[] } = {};
-                const isVolta = t.destino?.toUpperCase().includes('JBS/CASA') || 
-                                t.destino?.toUpperCase().includes('JBSXCASA') ||
-                                t.destino?.toUpperCase().includes('JBS X CASA') ||
-                                t.destino?.toUpperCase().includes('JBS-CASA') ||
-                                t.destino?.toUpperCase().includes('JBS > CASA');
-                const label = isVolta ? 'JBS ➔ CASA' : 'CASA ➔ JBS';
+                // Usar o destino real da escala (ex: "CAMI/JBS", "JBS/COLONIAL FLAT") formatado com seta
+                const rawDestino = t.destino || 'CASA/JBS';
+                const label = rawDestino.replace('/', ' ➤ ').toUpperCase();
 
                 if (t.passageiros) {
                   t.passageiros.forEach((p: any) => {
@@ -197,7 +194,8 @@ export function DriverHistoryScreen({ navigation }: any) {
                     const passNames = groupPass.map((p: any) => p.nome).join(', ') || 'N/A';
                     
                     const time = groupKey.split('_')[0];
-                    const destLabel = groupKey.split('_')[1]; // Ex: "CASA ➔ JBS" ou "JBS ➔ CASA"
+                    // Extrair o destino completo (tudo após o primeiro '_')
+                    const destLabel = groupKey.substring(groupKey.indexOf('_') + 1);
 
                     segments.push({
                       id: `${t.id}_${groupKey}`,

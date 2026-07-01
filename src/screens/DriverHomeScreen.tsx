@@ -96,9 +96,9 @@ export const DriverHomeScreen = ({ navigation }: any) => {
             const firstP = groupPass[0];
             
             const time = groupKey.split('_')[0];
-            const dest = groupKey.split('_')[1];
-            const tag = groupKey.split('_')[2];
-            const friendlyDest = tag === 'Volta' ? 'CASA' : dest;
+            // O groupKey é "HH:MM_DESTINO FORMATADO" (ex: "17:00_CASA ➤ JBS", "11:00_CAMI ➤ JBS")
+            const destLabel = groupKey.substring(groupKey.indexOf('_') + 1);
+            const friendlyDest = destLabel || 'N/A';
 
             rows.push({
               id: `${t.id}_${groupKey}`,
@@ -350,13 +350,10 @@ export const DriverHomeScreen = ({ navigation }: any) => {
       if (shift.groupStates) {
         Object.assign(mergedGroupStates, shift.groupStates);
       }
-      const isVolta = shift.destino?.toUpperCase().includes('JBS/CASA') || 
-                      shift.destino?.toUpperCase().includes('JBSXCASA') ||
-                      shift.destino?.toUpperCase().includes('JBS X CASA') ||
-                      shift.destino?.toUpperCase().includes('JBS-CASA') ||
-                      shift.destino?.toUpperCase().includes('JBS > CASA');
-      const tag = isVolta ? 'Volta' : 'Ida';
-      const label = isVolta ? 'JBS ➔ CASA' : 'CASA ➔ JBS';
+      
+      const rawDestino = shift.destino || 'CASA/JBS';
+      const label = rawDestino.replace('/', ' ➤ ').toUpperCase();
+      const tag = rawDestino.toUpperCase().includes('JBS/CASA') || rawDestino.toUpperCase().includes('JBS-CASA') ? 'Volta' : 'Ida';
       
       if (shift.passageiros) {
         shift.passageiros.forEach((p: any) => {
@@ -683,12 +680,16 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                 const time = firstP.horarioEntrada;
                 const direction = firstP.destinoLabel;
                 const tag = firstP.destinoTag;
-                const isVolta = tag === 'Volta';
-                
+
                 const groupState = consolidated.groupStates?.[groupKey] || { status: 'pending' };
                 const groupStatus = groupState.status || 'pending';
                 const isCompleted = groupStatus === 'completed';
                 const isActive = groupStatus === 'active';
+
+                const isSaidaCasa = direction?.startsWith('CASA');
+                const isVolta = tag === 'Volta';
+                const cardBg = isCompleted ? '#E6F4EA' : isSaidaCasa ? '#FEE2E2' : isVolta ? '#F3F4F6' : '#EBF4FF';
+                const cardTextColor = isCompleted ? colors.green : isSaidaCasa ? '#DF0A0A' : isVolta ? colors.graphite : '#2563EB';
 
                 const originalShift = firstP.originalShift;
 
@@ -696,15 +697,15 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                   <View key={groupKey} style={[styles.passengerGroupCard, isCompleted && { opacity: 0.8, borderColor: colors.green }]}>
                     <View style={[
                       styles.passengerGroupHeader, 
-                      { backgroundColor: isCompleted ? '#E6F4EA' : isVolta ? '#F3F4F6' : '#FEE2E2' }
+                      { backgroundColor: cardBg }
                     ]}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         <MaterialCommunityIcons name="clock-outline" size={16} color={colors.graphite} />
                         <Text style={{ fontWeight: 'bold', color: colors.graphite, fontSize: 14 }}>{time}</Text>
                       </View>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <MaterialCommunityIcons name="swap-horizontal" size={16} color={isCompleted ? colors.green : isVolta ? colors.graphite : '#DF0A0A'} />
-                        <Text style={{ fontWeight: 'bold', color: isCompleted ? colors.green : isVolta ? colors.graphite : '#DF0A0A', fontSize: 12 }}>
+                        <MaterialCommunityIcons name="swap-horizontal" size={16} color={cardTextColor} />
+                        <Text style={{ fontWeight: 'bold', color: cardTextColor, fontSize: 12 }}>
                           {isCompleted ? 'REALIZADO ✅' : direction}
                         </Text>
                       </View>
