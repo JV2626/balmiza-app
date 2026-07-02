@@ -221,7 +221,9 @@ export function DriverHistoryScreen({ navigation }: any) {
                   horaFim: t.horaFim || '-',
                   kmInicial: t.kmInicial || '-',
                   kmFinal: t.kmFinal || '-',
-                  displayType: t.isExtra ? 'EXTRA' : 'NORMAL',
+                  isExtra: t.isExtra === true,
+                  tipoExtra: t.tipoExtra || 'dia_extra',
+                  displayType: t.isExtra ? (t.tipoExtra === 'ultima_hora' ? 'DESVIO' : 'EXTRA') : 'NORMAL',
                   horaOrder: t.horaInicio || '00:00'
                 });
               }
@@ -268,7 +270,9 @@ export function DriverHistoryScreen({ navigation }: any) {
                           </View>
                           <Text style={[
                             styles.typeBadge,
-                            seg.displayType === 'EXTRA' ? styles.typeExtra : styles.typeNormal
+                            seg.displayType === 'EXTRA' ? styles.typeExtra :
+                            seg.displayType === 'DESVIO' ? styles.typeDesvio :
+                            styles.typeNormal
                           ]}>
                             {seg.displayType}
                           </Text>
@@ -475,6 +479,10 @@ const styles = StyleSheet.create({
   typeExtra: {
     backgroundColor: '#FFF5F5',
     color: colors.red
+  },
+  typeDesvio: {
+    backgroundColor: '#EBF4FF',
+    color: '#2563EB'
   },
   segmentDetailText: {
     fontSize: 13,

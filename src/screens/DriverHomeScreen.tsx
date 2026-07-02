@@ -125,7 +125,8 @@ export const DriverHomeScreen = ({ navigation }: any) => {
           kmInicial: t.kmInicial || '-',
           kmFinal: t.kmFinal || '-',
           isExtra: t.isExtra === true,
-          displayType: t.isExtra === true ? 'EXTRA' : 'NORMAL'
+          tipoExtra: t.tipoExtra || 'dia_extra',
+          displayType: t.isExtra === true ? (t.tipoExtra === 'ultima_hora' ? 'DESVIO' : 'EXTRA') : 'NORMAL'
         });
       }
     });
@@ -138,6 +139,8 @@ export const DriverHomeScreen = ({ navigation }: any) => {
   const [showExtraModal, setShowExtraModal] = useState(false);
   const [extraPassageiros, setExtraPassageiros] = useState('');
   const [extraDestino, setExtraDestino] = useState('CASA/JBS');
+  const [extraDestinoCustom, setExtraDestinoCustom] = useState('');
+  const [extraTipo, setExtraTipo] = useState<'ultima_hora' | 'dia_extra'>('ultima_hora');
   const [extraHoraSaida, setExtraHoraSaida] = useState('');
   const [extraHoraChegada, setExtraHoraChegada] = useState('');
   const [extraKmInicial, setExtraKmInicial] = useState('');
@@ -243,6 +246,10 @@ export const DriverHomeScreen = ({ navigation }: any) => {
       Alert.alert('Erro', 'Por favor, preencha todos os campos obrigatórios.');
       return;
     }
+    if (extraDestino === 'OUTRO' && !extraDestinoCustom.trim()) {
+      Alert.alert('Erro', 'Por favor, insira o nome do destino personalizado.');
+      return;
+    }
     if (Number(extraKmFinal) <= Number(extraKmInicial)) {
       Alert.alert('Erro', 'O KM Final deve ser maior que o KM Inicial.');
       return;
@@ -255,13 +262,14 @@ export const DriverHomeScreen = ({ navigation }: any) => {
       const formattedToday = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
       
       const plate = allocatedVehicle || (pendingShifts.length > 0 ? pendingShifts[0].carroPlaca : 'SEM CARRO');
+      const resolvedDestino = extraDestino === 'OUTRO' ? extraDestinoCustom.trim().toUpperCase() : extraDestino;
       
       // 1. Salvar na coleção 'viagens' (para o motorista ver na planilha digital)
       await addDoc(collection(db, 'viagens'), {
         motoristaId: driverEmail.toLowerCase().trim(),
         motoristaNome: driverEmail.split('@')[0].toUpperCase(),
         data: formattedToday,
-        destino: extraDestino,
+        destino: resolvedDestino,
         carroPlaca: plate,
         kmInicial: Number(extraKmInicial),
         kmFinal: Number(extraKmFinal),
@@ -270,11 +278,12 @@ export const DriverHomeScreen = ({ navigation }: any) => {
         horaFim: extraHoraChegada.trim(),
         status: 'completed',
         isExtra: true,
+        tipoExtra: extraTipo,
         checklistRealizado: true,
         passageiros: [{
           nome: extraPassageiros.trim(),
           endereco: 'Itapetininga, SP',
-          setor: 'EXTRA',
+          setor: extraTipo === 'ultima_hora' ? 'DESVIO' : 'EXTRA',
           status: 'concluido'
         }],
         createdAt: new Date(),
@@ -287,10 +296,11 @@ export const DriverHomeScreen = ({ navigation }: any) => {
         status: 'completed',
         closedAt: new Date(),
         finalOdometer: Number(extraKmFinal),
-        notes: 'VIAGEM EXTRA REGISTRADA PELO MOTORISTA',
+        notes: extraTipo === 'ultima_hora' ? 'DESVIO / ÚLTIMA HORA REGISTRADO PELO MOTORISTA' : 'VIAGEM EXTRA REGISTRADA PELO MOTORISTA',
         dashboardImageUrl: '',
-        closingLocation: extraDestino,
-        isExtra: true
+        closingLocation: resolvedDestino,
+        isExtra: true,
+        tipoExtra: extraTipo
       });
 
       // 3. Atualizar quilometragem do veículo no banco de dados
@@ -304,18 +314,21 @@ export const DriverHomeScreen = ({ navigation }: any) => {
         }
       }
 
-      Alert.alert('Sucesso', 'Viagem extra registrada com sucesso!');
+      Alert.alert('Sucesso', 'Viagem registrada com sucesso!');
       setShowExtraModal(false);
       
       // Limpar campos
       setExtraPassageiros('');
+      setExtraDestino('CASA/JBS');
+      setExtraDestinoCustom('');
+      setExtraTipo('ultima_hora');
       setExtraHoraSaida('');
       setExtraHoraChegada('');
       setExtraKmInicial('');
       setExtraKmFinal('');
     } catch (e) {
       console.log('Error saving extra trip:', e);
-      Alert.alert('Erro', 'Não foi possível registrar a viagem extra.');
+      Alert.alert('Erro', 'Não foi possível registrar a viagem.');
     } finally {
       setExtraSaving(false);
     }
@@ -643,7 +656,14 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                       <Text style={[styles.tableCell, { width: 70 }]}>{row.horaFim || '-'}</Text>
                       <Text style={[styles.tableCell, { width: 80 }]}>{row.kmInicial || '-'}</Text>
                       <Text style={[styles.tableCell, { width: 80 }]}>{row.kmFinal || '-'}</Text>
-                      <Text style={[styles.tableCell, { width: 60, fontWeight: 'bold', color: isExt ? '#DF0A0A' : colors.green }]}>
+                      <Text style={[
+                        styles.tableCell, 
+                        { 
+                          width: 60, 
+                          fontWeight: 'bold', 
+                          color: !row.isExtra ? colors.green : row.tipoExtra === 'ultima_hora' ? '#2563EB' : '#DF0A0A' 
+                        }
+                      ]}>
                         {row.displayType}
                       </Text>
                     </View>
@@ -971,6 +991,31 @@ export const DriverHomeScreen = ({ navigation }: any) => {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, marginVertical: 15 }}>
+              <Text style={styles.modalLabel}>Tipo de Viagem</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 5, marginBottom: 15 }}>
+                {[
+                  { id: 'ultima_hora', label: 'DESVIO / ÚLTIMA HORA' },
+                  { id: 'dia_extra', label: 'DIA EXTRA / EXTRA' }
+                ].map(t => (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={[
+                      styles.pickerChip,
+                      extraTipo === t.id && styles.pickerChipActive,
+                      { flex: 1, alignItems: 'center' }
+                    ]}
+                    onPress={() => setExtraTipo(t.id as any)}
+                  >
+                    <Text style={[
+                      styles.pickerChipText,
+                      extraTipo === t.id && { color: colors.white }
+                    ]}>
+                      {t.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
               <Text style={styles.modalLabel}>Passageiro(s)</Text>
               <TextInput
                 style={styles.modalInput}
@@ -980,7 +1025,7 @@ export const DriverHomeScreen = ({ navigation }: any) => {
               />
 
               <Text style={styles.modalLabel}>Sentido / Destino</Text>
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 5 }}>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 5, marginBottom: extraDestino === 'OUTRO' ? 10 : 0 }}>
                 {['CASA/JBS', 'JBS/CASA', 'OUTRO'].map(d => (
                   <TouchableOpacity
                     key={d}
@@ -1000,6 +1045,15 @@ export const DriverHomeScreen = ({ navigation }: any) => {
                   </TouchableOpacity>
                 ))}
               </View>
+
+              {extraDestino === 'OUTRO' && (
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Digite o destino (ex: Hospital, Casa do Celso, etc.)"
+                  value={extraDestinoCustom}
+                  onChangeText={setExtraDestinoCustom}
+                />
+              )}
 
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 15 }}>
                 <View style={{ flex: 1 }}>
